@@ -133,6 +133,36 @@ npm run dev
 
 El frontend estará disponible en `http://localhost:3000`
 
+## 🚀 Deployment en Servidor
+
+Para desplegar la aplicación en un servidor CentOS con Apache, consulta la **[Guía de Deployment](DEPLOYMENT.md)** completa.
+
+### Deployment Rápido
+
+1. **Primera vez (deployment completo)**:
+```bash
+chmod +x deploy.sh
+sudo ./deploy.sh fresh
+```
+
+2. **Actualizar aplicación existente**:
+```bash
+chmod +x quick-update.sh
+sudo ./quick-update.sh
+```
+
+3. **Ver logs**:
+```bash
+sudo ./deploy.sh logs
+```
+
+4. **Verificar estado**:
+```bash
+sudo ./deploy.sh status
+```
+
+Para más detalles sobre configuración de Apache, servicios systemd, y troubleshooting, revisa [DEPLOYMENT.md](DEPLOYMENT.md).
+
 ## 📖 Uso
 
 1. **Gestión de Contactos**: Importa contactos desde una API externa o agrégalos manualmente

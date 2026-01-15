@@ -127,6 +127,62 @@ async def health_check():
     }
 
 
+@app.get("/config")
+async def get_config():
+    """
+    Get current configuration status (without exposing sensitive values).
+    Useful for debugging environment variable issues.
+    """
+    return {
+        "server": {
+            "host": settings.host,
+            "port": settings.port
+        },
+        "webhooks": {
+            "whatsapp": {
+                "configured": bool(settings.webhook_whatsapp),
+                "url_preview": settings.webhook_whatsapp[:50] + "..." if settings.webhook_whatsapp else None
+            },
+            "email": {
+                "configured": bool(settings.webhook_email),
+                "url_preview": settings.webhook_email[:50] + "..." if settings.webhook_email else None
+            }
+        },
+        "contacts_api": {
+            "configured": bool(settings.contacts_api_url),
+            "url_preview": settings.contacts_api_url[:50] + "..." if settings.contacts_api_url else None
+        },
+        "whatsapp_business_api": {
+            "access_token_configured": bool(settings.whatsapp_access_token),
+            "access_token_preview": settings.whatsapp_access_token[:20] + "..." if settings.whatsapp_access_token and len(settings.whatsapp_access_token) > 20 else ("****" if settings.whatsapp_access_token else None),
+            "business_account_id_configured": bool(settings.whatsapp_business_account_id),
+            "business_account_id": settings.whatsapp_business_account_id if settings.whatsapp_business_account_id else None,
+            "phone_number_id_configured": bool(settings.whatsapp_phone_number_id),
+            "phone_number_id": settings.whatsapp_phone_number_id if settings.whatsapp_phone_number_id else None,
+            "fully_configured": bool(
+                settings.whatsapp_access_token and 
+                settings.whatsapp_business_account_id and 
+                settings.whatsapp_phone_number_id
+            ),
+            "templates_available": bool(
+                settings.whatsapp_access_token and 
+                settings.whatsapp_business_account_id and 
+                settings.whatsapp_phone_number_id
+            )
+        },
+        "frontend": {
+            "cors_url": settings.frontend_url
+        },
+        "database": {
+            "url": settings.database_url
+        },
+        "uploads": {
+            "directory": settings.upload_dir,
+            "max_size_mb": settings.max_file_size_mb
+        }
+    }
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(
