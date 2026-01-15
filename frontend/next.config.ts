@@ -7,8 +7,8 @@ const nextConfig: NextConfig = {
   // Asset prefix for static files
   assetPrefix: process.env.NEXT_PUBLIC_BASE_PATH || '/masivos_owo',
 
-  // Trailing slash
-  trailingSlash: false,
+  // Trailing slash - set to true for Apache compatibility
+  trailingSlash: true,
 
   // Output configuration
   output: 'standalone',
