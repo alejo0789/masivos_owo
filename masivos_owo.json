@@ -1,0 +1,126 @@
+{
+  "name": "masivos_owo",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ab0dfe61-d2e6-4c98-89c4-b4fc254fae69",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -656,
+        -32
+      ],
+      "id": "48a78134-e32a-408c-9f41-9ac1240d9337",
+      "name": "Webhook",
+      "webhookId": "ab0dfe61-d2e6-4c98-89c4-b4fc254fae69"
+    },
+    {
+      "parameters": {
+        "toRecipients": "={{ $json[\"body.recipients\"].email }}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.microsoftOutlook",
+      "typeVersion": 2,
+      "position": [
+        -128,
+        -80
+      ],
+      "id": "f608790c-a9ac-4ff7-9ab2-80446040f86b",
+      "name": "Send a message",
+      "webhookId": "14ffc8d2-2a75-487a-8c8a-fb26fe3e997d",
+      "credentials": {
+        "microsoftOutlookOAuth2Api": {
+          "id": "dD5pGvlU00N513gT",
+          "name": "Microsoft Outlook account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        112,
+        -128
+      ],
+      "id": "44fda1db-4de5-4882-8320-18cbe034c5ca",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "body.recipients",
+        "include": "allOtherFields",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        -400,
+        -32
+      ],
+      "id": "35efa0c9-77bf-49d8-a5d7-e74246e68716",
+      "name": "Split Out"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Split Out",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a message": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Respond to Webhook": {
+      "main": [
+        []
+      ]
+    },
+    "Split Out": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "5b460e79-69b1-4e2a-8008-38d19b245511",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "8d23bc59ace10dae756f2ceee80008ca5891945b1c49a3c28bc13eb82fa7dccb"
+  },
+  "id": "p687Ukxm5gMBMS9x",
+  "tags": []
+}

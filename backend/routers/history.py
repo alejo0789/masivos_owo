@@ -1,0 +1,138 @@
+"""History router for viewing sent messages."""
+from datetime import datetime, timedelta
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func, and_
+from typing import List, Optional
+from database import get_db
+from models.message_log import MessageLog
+from schemas.message import MessageResponse
+
+router = APIRouter(prefix="/history", tags=["history"])
+
+
+@router.get("", response_model=List[MessageResponse])
+async def get_history(
+    search: Optional[str] = Query(None, description="Search by recipient name, email or phone"),
+    channel: Optional[str] = Query(None, pattern="^(whatsapp|email|both)$"),
+    status: Optional[str] = Query(None, pattern="^(sent|failed|pending)$"),
+    date_from: Optional[datetime] = Query(None, description="Filter from this date"),
+    date_to: Optional[datetime] = Query(None, description="Filter until this date"),
+    limit: int = Query(50, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get message history with filtering options."""
+    query = select(MessageLog)
+    
+    conditions = []
+    
+    if search:
+        search_pattern = f"%{search}%"
+        conditions.append(
+            MessageLog.recipient_name.ilike(search_pattern) |
+            MessageLog.recipient_email.ilike(search_pattern) |
+            MessageLog.recipient_phone.ilike(search_pattern)
+        )
+    
+    if channel:
+        conditions.append(MessageLog.channel == channel)
+    
+    if status:
+        conditions.append(MessageLog.status == status)
+    
+    if date_from:
+        conditions.append(MessageLog.sent_at >= date_from)
+    
+    if date_to:
+        conditions.append(MessageLog.sent_at <= date_to)
+    
+    if conditions:
+        query = query.where(and_(*conditions))
+    
+    query = query.order_by(MessageLog.sent_at.desc())
+    query = query.offset(offset).limit(limit)
+    
+    result = await db.execute(query)
+    logs = result.scalars().all()
+    
+    return logs
+
+
+@router.get("/stats")
+async def get_stats(
+    days: int = Query(7, ge=1, le=365, description="Number of days to include in stats"),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get messaging statistics."""
+    cutoff_date = datetime.utcnow() - timedelta(days=days)
+    
+    # Total messages
+    total_result = await db.execute(
+        select(func.count(MessageLog.id)).where(MessageLog.sent_at >= cutoff_date)
+    )
+    total = total_result.scalar() or 0
+    
+    # Sent messages
+    sent_result = await db.execute(
+        select(func.count(MessageLog.id)).where(
+            and_(MessageLog.sent_at >= cutoff_date, MessageLog.status == "sent")
+        )
+    )
+    sent = sent_result.scalar() or 0
+    
+    # Failed messages
+    failed_result = await db.execute(
+        select(func.count(MessageLog.id)).where(
+            and_(MessageLog.sent_at >= cutoff_date, MessageLog.status == "failed")
+        )
+    )
+    failed = failed_result.scalar() or 0
+    
+    # By channel
+    whatsapp_result = await db.execute(
+        select(func.count(MessageLog.id)).where(
+            and_(MessageLog.sent_at >= cutoff_date, MessageLog.channel.in_(["whatsapp", "both"]))
+        )
+    )
+    whatsapp = whatsapp_result.scalar() or 0
+    
+    email_result = await db.execute(
+        select(func.count(MessageLog.id)).where(
+            and_(MessageLog.sent_at >= cutoff_date, MessageLog.channel.in_(["email", "both"]))
+        )
+    )
+    email = email_result.scalar() or 0
+    
+    return {
+        "period_days": days,
+        "total": total,
+        "sent": sent,
+        "failed": failed,
+        "success_rate": round((sent / total * 100) if total > 0 else 0, 2),
+        "by_channel": {
+            "whatsapp": whatsapp,
+            "email": email
+        }
+    }
+
+
+@router.get("/count")
+async def get_history_count(
+    channel: Optional[str] = Query(None, pattern="^(whatsapp|email|both)$"),
+    status: Optional[str] = Query(None, pattern="^(sent|failed|pending)$"),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get total count of messages in history."""
+    query = select(func.count(MessageLog.id))
+    
+    if channel:
+        query = query.where(MessageLog.channel == channel)
+    
+    if status:
+        query = query.where(MessageLog.status == status)
+    
+    result = await db.execute(query)
+    count = result.scalar()
+    
+    return {"count": count}

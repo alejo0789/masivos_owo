@@ -1,0 +1,727 @@
+'use client';
+
+import { useState, useRef, useEffect } from 'react';
+import {
+  Contact,
+  sendBulkMessages,
+  BulkSendResponse,
+  uploadFiles,
+  deleteFile,
+  WhatsAppTemplate,
+  getApprovedWhatsAppTemplates,
+  sendWhatsAppTemplate,
+  WhatsAppBulkSendResponse
+} from '@/lib/api';
+import ContactList from '@/components/ContactList';
+
+export default function Home() {
+  const [selectedContacts, setSelectedContacts] = useState<Contact[]>([]);
+  const [subject, setSubject] = useState('');
+  const [content, setContent] = useState('');
+  const [channel, setChannel] = useState<'whatsapp' | 'email' | 'both'>('both');
+  const [uploadedFiles, setUploadedFiles] = useState<{ name: string, preview?: string }[]>([]);
+  const [sending, setSending] = useState(false);
+  const [result, setResult] = useState<BulkSendResponse | WhatsAppBulkSendResponse | null>(null);
+  const [error, setError] = useState('');
+
+  // WhatsApp Templates
+  const [templates, setTemplates] = useState<WhatsAppTemplate[]>([]);
+  const [showTemplates, setShowTemplates] = useState(false);
+  const [selectedTemplate, setSelectedTemplate] = useState<WhatsAppTemplate | null>(null);
+  const [loadingTemplates, setLoadingTemplates] = useState(false);
+
+  // File upload
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    loadTemplates();
+  }, []);
+
+  const loadTemplates = async () => {
+    try {
+      setLoadingTemplates(true);
+      const response = await getApprovedWhatsAppTemplates();
+      if (response.success) {
+        setTemplates(response.templates);
+      }
+    } catch (err) {
+      console.error('Error loading WhatsApp templates:', err);
+    } finally {
+      setLoadingTemplates(false);
+    }
+  };
+
+  const extractVariables = (text: string): string[] => {
+    const regex = /\{\{(\w+)\}\}/g;
+    const matches: string[] = [];
+    let match;
+    while ((match = regex.exec(text)) !== null) {
+      if (!matches.includes(match[1])) {
+        matches.push(match[1]);
+      }
+    }
+    return matches;
+  };
+
+  const getPreviewContent = (template: WhatsAppTemplate, contactName?: string) => {
+    let text = template.body?.text || '';
+    // Replace common variable patterns with contact name
+    text = text.replace(/\{\{nombre\}\}/gi, contactName || '[Nombre del contacto]');
+    text = text.replace(/\{\{name\}\}/gi, contactName || '[Nombre del contacto]');
+    return text;
+  };
+
+  const applyTemplate = (template: WhatsAppTemplate) => {
+    const bodyText = template.body?.text || '';
+    // Show preview with placeholder
+    const previewText = getPreviewContent(template);
+    setContent(previewText);
+    setSelectedTemplate(template);
+    setChannel('whatsapp');
+    setShowTemplates(false);
+  };
+
+  const clearTemplate = () => {
+    setSelectedTemplate(null);
+    setContent('');
+  };
+
+  const handleFileUpload = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    setUploading(true);
+    try {
+      const fileArray = Array.from(files);
+      const filenames = await uploadFiles(fileArray);
+
+      const newFiles = filenames.map((name, index) => {
+        const file = fileArray[index];
+        const isImage = file.type.startsWith('image/');
+        let preview: string | undefined;
+
+        if (isImage) {
+          preview = URL.createObjectURL(file);
+        }
+
+        return { name, preview };
+      });
+
+      setUploadedFiles([...uploadedFiles, ...newFiles]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error al subir archivo');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleRemoveFile = async (filename: string) => {
+    try {
+      await deleteFile(filename);
+      const file = uploadedFiles.find(f => f.name === filename);
+      if (file?.preview) {
+        URL.revokeObjectURL(file.preview);
+      }
+      setUploadedFiles(uploadedFiles.filter(f => f.name !== filename));
+    } catch (err) {
+      console.error('Error removing file:', err);
+    }
+  };
+
+  const canSend = selectedContacts.length > 0 && (content.trim().length > 0 || selectedTemplate);
+
+  const handleSend = async () => {
+    if (!canSend) return;
+    setError('');
+    setResult(null);
+    setSending(true);
+
+    try {
+      // If using a WhatsApp template, send directly via WhatsApp API
+      if (selectedTemplate) {
+        // Prepare recipients with all data for variable mapping
+        const recipients = selectedContacts
+          .filter(c => c.phone) // Only contacts with phone
+          .map(c => ({
+            name: c.name,
+            phone: c.phone!,
+            email: c.email,
+            department: c.department,
+            position: c.position,
+          }));
+
+        if (recipients.length === 0) {
+          setError('Ninguno de los contactos seleccionados tiene número de teléfono');
+          setSending(false);
+          return;
+        }
+
+        // Extract actual variables from the template
+        const templateVarsInBody = extractVariables(selectedTemplate.body?.text || '');
+
+        // Define all possible mappings
+        const allMappings: Record<string, string> = {
+          'nombre': 'name',
+          'name': 'name',
+          'empresa': 'department',
+          'company': 'department',
+          'departamento': 'department',
+          'department': 'department',
+          'cargo': 'position',
+          'position': 'position',
+        };
+
+        // Only include mappings for variables that actually exist in the template
+        const variableMapping: Record<string, string> = {};
+        templateVarsInBody.forEach(varName => {
+          const lowerVar = varName.toLowerCase();
+          if (allMappings[lowerVar]) {
+            variableMapping[lowerVar] = allMappings[lowerVar];
+          }
+        });
+
+        const response = await sendWhatsAppTemplate({
+          template_name: selectedTemplate.name,
+          language_code: selectedTemplate.language,
+          recipients,
+          variable_mapping: variableMapping,
+        });
+
+        setResult(response);
+
+        if (response.sent > 0 && response.failed === 0) {
+          setSelectedContacts([]);
+          setContent('');
+          setSelectedTemplate(null);
+          uploadedFiles.forEach(f => f.preview && URL.revokeObjectURL(f.preview));
+          setUploadedFiles([]);
+        }
+      } else {
+        // Regular message via n8n webhook
+        const recipients = selectedContacts.map(c => ({
+          name: c.name,
+          phone: c.phone,
+          email: c.email,
+        }));
+
+        const response = await sendBulkMessages({
+          recipients,
+          subject: subject || undefined,
+          content,
+          channel,
+          attachments: uploadedFiles.map(f => f.name),
+        });
+
+        setResult(response);
+        if (response.sent > 0 && response.failed === 0) {
+          setSelectedContacts([]);
+          setSubject('');
+          setContent('');
+          setSelectedTemplate(null);
+          uploadedFiles.forEach(f => f.preview && URL.revokeObjectURL(f.preview));
+          setUploadedFiles([]);
+        }
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error al enviar mensajes');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const imageFiles = uploadedFiles.filter(f => f.preview);
+  const otherFiles = uploadedFiles.filter(f => !f.preview);
+
+  const getChannelStyles = () => {
+    switch (channel) {
+      case 'whatsapp':
+        return { header: 'composer-header whatsapp', sendBtn: 'send-btn send-btn-whatsapp' };
+      case 'email':
+        return { header: 'composer-header email', sendBtn: 'send-btn send-btn-email' };
+      default:
+        return { header: 'composer-header both', sendBtn: 'send-btn send-btn-default' };
+    }
+  };
+
+  const getCategoryBadge = (category: string) => {
+    switch (category) {
+      case 'MARKETING': return <span className="badge badge-purple text-xs">📢 Marketing</span>;
+      case 'UTILITY': return <span className="badge badge-info text-xs">🔧 Utilidad</span>;
+      case 'AUTHENTICATION': return <span className="badge badge-warning text-xs">🔐 Auth</span>;
+      default: return <span className="badge text-xs">{category}</span>;
+    }
+  };
+
+  const styles = getChannelStyles();
+
+  // Get template variables info
+  const templateVars = selectedTemplate ? extractVariables(selectedTemplate.body?.text || '') : [];
+  const contactsWithPhone = selectedContacts.filter(c => c.phone).length;
+
+  return (
+    <div className="p-6 lg:p-8 h-screen flex flex-col relative overflow-hidden">
+      {/* Background decorative elements */}
+      <div className="absolute top-10 right-20 w-96 h-96 rounded-full bg-[#8B5A9B] opacity-5 blur-[120px] pointer-events-none" />
+      <div className="absolute bottom-20 left-10 w-64 h-64 rounded-full bg-[#00B4D8] opacity-5 blur-[100px] pointer-events-none" />
+
+      {/* Decorative curves */}
+      <svg className="absolute top-0 right-0 w-full h-48 opacity-10 pointer-events-none" viewBox="0 0 1200 200" preserveAspectRatio="none">
+        <path d="M0 100 Q 300 0 600 100 T 1200 100" stroke="url(#curveGrad)" strokeWidth="2" fill="none" />
+        <path d="M0 150 Q 300 50 600 150 T 1200 150" stroke="url(#curveGrad)" strokeWidth="1" fill="none" />
+        <defs>
+          <linearGradient id="curveGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="#8B5A9B" />
+            <stop offset="50%" stopColor="#00B4D8" />
+            <stop offset="100%" stopColor="#9D4EDD" />
+          </linearGradient>
+        </defs>
+      </svg>
+
+      {/* Sending Overlay */}
+      {sending && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{
+          background: 'rgba(255, 255, 255, 0.9)',
+          backdropFilter: 'blur(10px)'
+        }}>
+          <div className="card p-10 flex flex-col items-center gap-6 animate-fade-in" style={{
+            boxShadow: '0 20px 60px rgba(139, 90, 155, 0.2)'
+          }}>
+            <div className="relative">
+              <div className="spinner-glow" />
+            </div>
+            <div className="text-center">
+              <p className="text-2xl font-bold text-gray-900 mb-2">
+                {selectedTemplate ? 'Enviando plantilla WhatsApp...' : 'Enviando mensajes...'}
+              </p>
+              <p className="text-gray-500">
+                {selectedTemplate
+                  ? `${contactsWithPhone} destinatario${contactsWithPhone !== 1 ? 's' : ''} con teléfono`
+                  : `${selectedContacts.length} destinatario${selectedContacts.length !== 1 ? 's' : ''}`
+                }
+              </p>
+            </div>
+            <div className="flex gap-2">
+              {selectedTemplate ? (
+                <span className="badge badge-success">📱 WhatsApp Directo</span>
+              ) : (
+                <>
+                  {channel !== 'email' && <span className="badge badge-success">📱 WhatsApp</span>}
+                  {channel !== 'whatsapp' && <span className="badge badge-info">📧 Email</span>}
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Header */}
+      <div className="mb-6 relative z-10">
+        <h1 className="text-3xl font-bold text-gray-900 mb-1">
+          Envío <span className="text-gradient">Masivo</span>
+        </h1>
+        <p className="text-gray-500 text-sm">Envía mensajes por WhatsApp y Email de forma simultánea</p>
+      </div>
+
+      {/* Result/Error Toasts */}
+      {result && (
+        <div className={`mb-5 p-4 rounded-2xl animate-fade-in flex items-center justify-between ${result.failed === 0
+          ? 'bg-green-50 border border-green-200'
+          : 'bg-amber-50 border border-amber-200'
+          }`} style={{
+            boxShadow: result.failed === 0
+              ? '0 4px 20px rgba(0, 200, 83, 0.15)'
+              : '0 4px 20px rgba(255, 179, 0, 0.15)'
+          }}>
+          <div className="flex items-center gap-4">
+            <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${result.failed === 0 ? 'bg-green-100' : 'bg-amber-100'
+              }`}>
+              <span className="text-2xl">{result.failed === 0 ? '✅' : '⚠️'}</span>
+            </div>
+            <div>
+              <p className="font-semibold text-gray-900">
+                {result.failed === 0 ? '¡Envío completado con éxito!' : 'Envío parcialmente completado'}
+              </p>
+              <p className="text-sm text-gray-500">
+                {result.sent} enviados exitosamente, {result.failed} fallidos
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => setResult(null)}
+            className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center text-gray-400 hover:bg-gray-200 hover:text-gray-600 transition-all"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      {error && (
+        <div className="mb-5 p-4 rounded-2xl animate-fade-in flex items-center justify-between bg-red-50 border border-red-200" style={{
+          boxShadow: '0 4px 20px rgba(255, 71, 87, 0.15)'
+        }}>
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-xl bg-red-100 flex items-center justify-center">
+              <span className="text-2xl">❌</span>
+            </div>
+            <div>
+              <p className="font-semibold text-gray-900">Error en el envío</p>
+              <p className="text-sm text-red-600">{error}</p>
+            </div>
+          </div>
+          <button
+            onClick={() => setError('')}
+            className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center text-gray-400 hover:bg-gray-200 hover:text-gray-600 transition-all"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      {/* Main Grid */}
+      <div className="flex-1 grid grid-cols-1 xl:grid-cols-5 gap-6 min-h-0 relative z-10">
+
+        {/* LEFT: Message Composer (3 cols) */}
+        <div className="xl:col-span-3 flex flex-col gap-5">
+
+          {/* Channel Selection - Hidden when template selected */}
+          {!selectedTemplate && (
+            <div className="flex gap-3">
+              {[
+                { value: 'whatsapp', label: 'WhatsApp', icon: '📱', activeClass: 'active-whatsapp' },
+                { value: 'email', label: 'Email', icon: '📧', activeClass: 'active-email' },
+                { value: 'both', label: 'Ambos', icon: '🔄', activeClass: 'active-both' },
+              ].map((option) => (
+                <button
+                  key={option.value}
+                  onClick={() => setChannel(option.value as 'whatsapp' | 'email' | 'both')}
+                  className={`channel-btn ${channel === option.value ? option.activeClass : ''}`}
+                >
+                  <span className="text-xl">{option.icon}</span>
+                  <span className="font-semibold hidden sm:inline">{option.label}</span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Template selection notice */}
+          {selectedTemplate && (
+            <div className="p-4 rounded-xl bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 animate-fade-in">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">📱</span>
+                  <div>
+                    <p className="font-bold text-green-800">Plantilla WhatsApp: {selectedTemplate.name}</p>
+                    <p className="text-xs text-green-600">{selectedTemplate.language} • Envío directo via API</p>
+                  </div>
+                  {getCategoryBadge(selectedTemplate.category)}
+                </div>
+                <button
+                  onClick={clearTemplate}
+                  className="px-3 py-1.5 rounded-lg text-sm font-medium text-red-600 hover:bg-red-50 transition-all"
+                >
+                  ✕ Quitar
+                </button>
+              </div>
+
+              {/* Variable mapping info */}
+              {templateVars.length > 0 && (
+                <div className="mt-3 p-3 rounded-lg bg-white/60 border border-green-100">
+                  <p className="text-sm font-medium text-green-800 mb-2">🔤 Variables automáticas</p>
+                  <div className="flex flex-wrap gap-2">
+                    {templateVars.map((varName) => {
+                      const mapping: Record<string, string> = {
+                        'nombre': 'Nombre del contacto',
+                        'name': 'Nombre del contacto',
+                        'empresa': 'Departamento',
+                        'company': 'Departamento',
+                        'departamento': 'Departamento',
+                        'department': 'Departamento',
+                        'cargo': 'Posición',
+                        'position': 'Posición',
+                      };
+                      return (
+                        <span key={varName} className="px-2 py-1 rounded-lg bg-purple-100 text-purple-700 text-xs">
+                          {`{{${varName}}}`} → {mapping[varName.toLowerCase()] || 'Campo del contacto'}
+                        </span>
+                      );
+                    })}
+                  </div>
+                  <p className="text-xs text-gray-500 mt-2">
+                    Las variables se reemplazarán automáticamente con los datos de cada contacto seleccionado.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Subject for email */}
+          {(channel === 'email' || channel === 'both') && !selectedTemplate && (
+            <div className="animate-fade-in">
+              <input
+                type="text"
+                className="input"
+                placeholder="✉️ Asunto del correo electrónico..."
+                value={subject}
+                onChange={(e) => setSubject(e.target.value)}
+              />
+            </div>
+          )}
+
+          {/* Message Composer Card */}
+          <div className="composer-container flex flex-col flex-1" style={{ minHeight: '320px' }}>
+
+            {/* Header */}
+            <div className={styles.header}>
+              <div className="flex items-center gap-3">
+                <span className="text-lg">
+                  {selectedTemplate ? '📱' : channel === 'whatsapp' ? '💬' : channel === 'email' ? '📧' : '📨'}
+                </span>
+                <span className={`font-semibold ${channel === 'whatsapp' || selectedTemplate ? 'text-white' : 'text-gray-800'}`}>
+                  {selectedTemplate
+                    ? `WhatsApp Template: ${selectedTemplate.name}`
+                    : channel === 'whatsapp' ? 'WhatsApp Message'
+                      : channel === 'email' ? 'Email Message'
+                        : 'Mensaje Múltiple'}
+                </span>
+              </div>
+              <button
+                onClick={() => setShowTemplates(!showTemplates)}
+                disabled={loadingTemplates}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${channel === 'whatsapp' || selectedTemplate
+                  ? 'text-white/80 hover:bg-white/10'
+                  : 'text-[#8B5A9B] hover:bg-[#8B5A9B]/10'
+                  }`}
+              >
+                {loadingTemplates ? (
+                  <div className="spinner" style={{ width: '16px', height: '16px' }} />
+                ) : (
+                  <>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+                    </svg>
+                    Plantillas ({templates.length})
+                  </>
+                )}
+              </button>
+            </div>
+
+            {/* Templates Dropdown */}
+            {showTemplates && templates.length > 0 && (
+              <div className="p-4 border-b border-green-100 animate-fade-in bg-gradient-to-r from-green-50 to-emerald-50">
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-xs text-gray-600 font-semibold uppercase tracking-wider">
+                    📱 Plantillas de WhatsApp Business (envío directo)
+                  </p>
+                  <button onClick={() => setShowTemplates(false)} className="text-gray-400 hover:text-gray-600">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <line x1="18" y1="6" x2="6" y2="18" />
+                      <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
+                  </button>
+                </div>
+                <div className="space-y-2 max-h-64 overflow-y-auto">
+                  {templates.map((template) => (
+                    <button
+                      key={template.id}
+                      onClick={() => applyTemplate(template)}
+                      className="w-full text-left p-3 bg-white rounded-xl border border-gray-200 hover:border-green-400 hover:shadow-md transition-all"
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="font-semibold text-gray-900">{template.name}</span>
+                        <div className="flex gap-2">
+                          {getCategoryBadge(template.category)}
+                          <span className="badge badge-success text-xs">✓ Aprobada</span>
+                        </div>
+                      </div>
+                      {template.header?.text && (
+                        <p className="text-xs text-gray-400 mb-1">📌 {template.header.text}</p>
+                      )}
+                      <p className="text-sm text-gray-600 line-clamp-2">{template.body?.text}</p>
+                      <div className="flex items-center gap-3 mt-2">
+                        {template.variables?.length > 0 && (
+                          <span className="text-xs text-purple-600">
+                            🔤 Variables: se llenarán automáticamente
+                          </span>
+                        )}
+                        <span className="text-xs text-gray-400">🌐 {template.language}</span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Image Preview Grid - only for non-template messages */}
+            {!selectedTemplate && imageFiles.length > 0 && (
+              <div className="p-4 border-b border-gray-100 bg-gray-50/50">
+                <div className="flex gap-3 overflow-x-auto pb-2">
+                  {imageFiles.map((file) => (
+                    <div key={file.name} className="relative flex-shrink-0 group">
+                      <img
+                        src={file.preview}
+                        alt={file.name}
+                        className="h-20 w-20 object-cover rounded-xl border-2 border-purple-200"
+                        style={{ boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                      />
+                      <button
+                        onClick={() => handleRemoveFile(file.name)}
+                        className="absolute -top-2 -right-2 w-6 h-6 rounded-full flex items-center justify-center text-xs text-white opacity-0 group-hover:opacity-100 transition-all bg-red-500 hover:bg-red-600"
+                        style={{ boxShadow: '0 2px 8px rgba(255, 71, 87, 0.4)' }}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Other Files */}
+            {!selectedTemplate && otherFiles.length > 0 && (
+              <div className="px-4 py-3 border-b border-gray-100">
+                <div className="flex flex-wrap gap-2">
+                  {otherFiles.map((file) => (
+                    <span key={file.name} className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium bg-purple-50 border border-purple-200 text-[#8B5A9B]">
+                      📎 {file.name.length > 15 ? file.name.substring(0, 12) + '...' : file.name}
+                      <button
+                        onClick={() => handleRemoveFile(file.name)}
+                        className="hover:text-red-500 transition-colors"
+                      >
+                        ✕
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Textarea / Template Preview */}
+            <div className="flex-1 p-4 bg-white">
+              {selectedTemplate ? (
+                <div className="h-full flex flex-col">
+                  <p className="text-xs text-gray-400 mb-2">Vista previa (las variables se reemplazarán por cada contacto):</p>
+                  <div className="flex-1 p-4 rounded-xl bg-gray-50 border border-gray-200">
+                    {selectedTemplate.header?.text && (
+                      <p className="font-bold text-gray-900 mb-2">{selectedTemplate.header.text}</p>
+                    )}
+                    <p className="text-gray-700 whitespace-pre-wrap">{content}</p>
+                    {selectedTemplate.footer?.text && (
+                      <p className="text-xs text-gray-400 mt-3 pt-2 border-t border-gray-200">{selectedTemplate.footer.text}</p>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <textarea
+                  className="w-full h-full resize-none bg-transparent border-0 focus:ring-0 focus:outline-none text-gray-800 placeholder-gray-400 text-base leading-relaxed"
+                  placeholder="Escribe tu mensaje aquí... ✨"
+                  value={content}
+                  onChange={(e) => setContent(e.target.value)}
+                />
+              )}
+            </div>
+
+            {/* Bottom Bar */}
+            <div className="composer-footer">
+              <div className="flex items-center gap-4">
+                {!selectedTemplate && (
+                  <>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      multiple
+                      accept="image/*,.pdf,.doc,.docx,.xls,.xlsx"
+                      className="hidden"
+                      onChange={(e) => handleFileUpload(e.target.files)}
+                    />
+                    <button
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={uploading}
+                      className="w-10 h-10 rounded-xl flex items-center justify-center transition-all bg-white border border-gray-200 hover:border-[#8B5A9B] hover:bg-purple-50"
+                      title="Adjuntar archivo"
+                    >
+                      {uploading ? (
+                        <div className="spinner" style={{ width: '18px', height: '18px' }} />
+                      ) : (
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#8B5A9B" strokeWidth="2">
+                          <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+                        </svg>
+                      )}
+                    </button>
+                  </>
+                )}
+                <div className="flex items-center gap-2 text-gray-400 text-sm">
+                  {selectedTemplate ? (
+                    <span className="text-green-600 font-medium">⚡ Envío directo API</span>
+                  ) : (
+                    <>
+                      <span className="text-[#8B5A9B] font-medium">{content.length}</span>
+                      <span>caracteres</span>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-4">
+                <div className="hidden sm:flex items-center gap-2 px-4 py-2 rounded-xl bg-purple-50 border border-purple-100">
+                  {selectedTemplate ? (
+                    <>
+                      <span className="text-green-600 font-semibold">{contactsWithPhone}</span>
+                      <span className="text-gray-500 text-sm">con teléfono</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-[#8B5A9B] font-semibold">{selectedContacts.length}</span>
+                      <span className="text-gray-500 text-sm">contacto{selectedContacts.length !== 1 ? 's' : ''}</span>
+                    </>
+                  )}
+                </div>
+                <button
+                  onClick={handleSend}
+                  disabled={!canSend || sending}
+                  className={selectedTemplate ? 'send-btn send-btn-whatsapp' : styles.sendBtn}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="white">
+                    <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Quick Stats */}
+          <div className="flex gap-3 flex-wrap">
+            <div className="stat-pill">
+              <span className="text-lg">📱</span>
+              <span>{selectedContacts.filter(c => c.phone).length} con teléfono</span>
+            </div>
+            <div className="stat-pill">
+              <span className="text-lg">📧</span>
+              <span>{selectedContacts.filter(c => c.email).length} con email</span>
+            </div>
+            {!selectedTemplate && (
+              <div className="stat-pill">
+                <span className="text-lg">📎</span>
+                <span>{uploadedFiles.length} adjunto{uploadedFiles.length !== 1 ? 's' : ''}</span>
+              </div>
+            )}
+            {selectedTemplate && (
+              <div className="stat-pill" style={{ background: 'rgba(34, 197, 94, 0.1)', borderColor: 'rgba(34, 197, 94, 0.2)' }}>
+                <span className="text-lg">⚡</span>
+                <span className="text-green-700">API Directa (sin n8n)</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* RIGHT: Contacts (2 cols) */}
+        <div className="xl:col-span-2 min-h-0">
+          <ContactList
+            selectedContacts={selectedContacts}
+            onSelectionChange={setSelectedContacts}
+            channel={channel}
+            selectedTemplate={selectedTemplate}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
