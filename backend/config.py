@@ -15,8 +15,11 @@ class Settings(BaseSettings):
     webhook_email: str = ""
     webhook_assistant: str = ""
     
-    # External API
-    contacts_api_url: str = ""
+    # External API - OWO
+    owo_api_login_url: str = ""
+    owo_api_contacts_url: str = ""
+    owo_api_email: str = ""
+    owo_api_password: str = ""
     
     # File Upload
     max_file_size_mb: int = 15
@@ -29,6 +32,12 @@ class Settings(BaseSettings):
     whatsapp_access_token: str = ""
     whatsapp_business_account_id: str = ""
     whatsapp_phone_number_id: str = ""
+    
+    # LabsMobile SMS API
+    labsmobile_api_url: str = "https://api.labsmobile.com/json/send"
+    labsmobile_username: str = ""
+    labsmobile_token: str = ""
+    labsmobile_sender: str = ""
     
     # Database
     database_url: str = "sqlite+aiosqlite:///./messaging.db"

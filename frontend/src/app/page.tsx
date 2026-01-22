@@ -12,7 +12,9 @@ import {
   sendWhatsAppTemplate,
   WhatsAppBulkSendResponse,
   Template,
-  getTemplates
+  getTemplates,
+  sendBulkSMS,
+  getSMSCredits
 } from '@/lib/api';
 import ContactList from '@/components/ContactList';
 
@@ -20,7 +22,7 @@ export default function Home() {
   const [selectedContacts, setSelectedContacts] = useState<Contact[]>([]);
   const [subject, setSubject] = useState('');
   const [content, setContent] = useState('');
-  const [channel, setChannel] = useState<'whatsapp' | 'email' | 'both'>('both');
+  const [channel, setChannel] = useState<'whatsapp' | 'email' | 'sms'>('whatsapp');
   const [uploadedFiles, setUploadedFiles] = useState<{ name: string, preview?: string }[]>([]);
   const [sending, setSending] = useState(false);
   const [result, setResult] = useState<BulkSendResponse | WhatsAppBulkSendResponse | null>(null);
@@ -144,29 +146,20 @@ export default function Home() {
   };
 
   // Handle channel change - clear templates from other channels
-  const handleChannelChange = (newChannel: 'whatsapp' | 'email' | 'both') => {
+  // Handle channel change - clear templates from other channels
+  const handleChannelChange = (newChannel: 'whatsapp' | 'email' | 'sms') => {
     // If changing away from email, clear email template
-    if (newChannel === 'whatsapp' && selectedEmailTemplate) {
+    if (newChannel !== 'email' && selectedEmailTemplate) {
       setSelectedEmailTemplate(null);
       setSubject('');
       setContent('');
     }
     // If changing away from whatsapp, clear whatsapp template
-    if (newChannel === 'email' && selectedTemplate) {
+    if (newChannel !== 'whatsapp' && selectedTemplate) {
       setSelectedTemplate(null);
       setContent('');
     }
-    // If changing to 'both', clear both templates
-    if (newChannel === 'both') {
-      if (selectedEmailTemplate) {
-        setSelectedEmailTemplate(null);
-      }
-      if (selectedTemplate) {
-        setSelectedTemplate(null);
-      }
-      setSubject('');
-      setContent('');
-    }
+
     setChannel(newChannel);
   };
 
@@ -364,35 +357,75 @@ export default function Home() {
           setUploadedFiles([]);
         }
       } else {
-        // Regular message via n8n webhook
-        const recipients = selectedContacts.map(c => ({
-          name: c.name,
-          phone: c.phone,
-          email: c.email,
-        }));
+        // Regular message via SMS or n8n webhook
+        if (channel === 'sms') {
+          // SMS Sending Logic
+          const recipients = selectedContacts
+            .filter(c => c.phone) // Only contacts with phone
+            .map(c => ({
+              phone: c.phone!,
+              name: c.name
+            }));
 
-        // For email channel, wrap content in full HTML template
-        let emailContent = content;
-        if (channel === 'email' || channel === 'both') {
-          emailContent = generateFullEmailHtml(content, subject || 'Mensaje de OWO');
-        }
+          if (recipients.length === 0) {
+            setError('Ninguno de los contactos seleccionados tiene número de teléfono');
+            setSending(false);
+            return;
+          }
 
-        const response = await sendBulkMessages({
-          recipients,
-          subject: subject || undefined,
-          content: emailContent,
-          channel,
-          attachments: uploadedFiles.map(f => f.name),
-        });
+          const response = await sendBulkSMS({
+            recipients,
+            message: content,
+          });
 
-        setResult(response);
-        if (response.sent > 0 && response.failed === 0) {
-          setSelectedContacts([]);
-          setSubject('');
-          setContent('');
-          setSelectedTemplate(null);
-          uploadedFiles.forEach(f => f.preview && URL.revokeObjectURL(f.preview));
-          setUploadedFiles([]);
+          // Adapt SMS response to match BulkSendResponse structure generically
+          const result: BulkSendResponse = {
+            total: response.total || 0,
+            sent: response.sent || 0,
+            failed: response.failed || 0,
+            messages: [] // SMS service might not return detailed logs per message in this call yet
+          };
+
+          setResult(result);
+
+          if (response.success) {
+            setSelectedContacts([]);
+            setContent('');
+          } else {
+            setError(response.error || 'Error enviando SMS');
+          }
+
+        } else {
+          // Regular message via n8n webhook (WhatsApp or Email)
+          const recipients = selectedContacts.map(c => ({
+            name: c.name,
+            phone: c.phone,
+            email: c.email,
+          }));
+
+          // For email channel, wrap content in full HTML template
+          let emailContent = content;
+          if (channel === 'email') {
+            emailContent = generateFullEmailHtml(content, subject || 'Mensaje de OWO');
+          }
+
+          const response = await sendBulkMessages({
+            recipients,
+            subject: subject || undefined,
+            content: emailContent,
+            channel: channel as 'whatsapp' | 'email', // Cast since we removed 'both' but API might still support it
+            attachments: uploadedFiles.map(f => f.name),
+          });
+
+          setResult(response);
+          if (response.sent > 0 && response.failed === 0) {
+            setSelectedContacts([]);
+            setSubject('');
+            setContent('');
+            setSelectedTemplate(null);
+            uploadedFiles.forEach(f => f.preview && URL.revokeObjectURL(f.preview));
+            setUploadedFiles([]);
+          }
         }
       }
     } catch (err) {
@@ -411,8 +444,10 @@ export default function Home() {
         return { header: 'composer-header whatsapp', sendBtn: 'send-btn send-btn-whatsapp' };
       case 'email':
         return { header: 'composer-header email', sendBtn: 'send-btn send-btn-email' };
+      case 'sms':
+        return { header: 'composer-header sms', sendBtn: 'send-btn send-btn-sms' };
       default:
-        return { header: 'composer-header both', sendBtn: 'send-btn send-btn-default' };
+        return { header: 'composer-header default', sendBtn: 'send-btn' };
     }
   };
 
@@ -562,11 +597,11 @@ export default function Home() {
               {[
                 { value: 'whatsapp', label: 'WhatsApp', icon: '📱', activeClass: 'active-whatsapp' },
                 { value: 'email', label: 'Email', icon: '📧', activeClass: 'active-email' },
-                { value: 'both', label: 'Ambos', icon: '🔄', activeClass: 'active-both' },
+                { value: 'sms', label: 'SMS', icon: '💬', activeClass: 'active-sms' },
               ].map((option) => (
                 <button
                   key={option.value}
-                  onClick={() => handleChannelChange(option.value as 'whatsapp' | 'email' | 'both')}
+                  onClick={() => handleChannelChange(option.value as 'whatsapp' | 'email' | 'sms')}
                   className={`channel-btn ${channel === option.value ? option.activeClass : ''}`}
                 >
                   <span className="text-xl">{option.icon}</span>
@@ -628,7 +663,7 @@ export default function Home() {
           )}
 
           {/* Subject for email */}
-          {(channel === 'email' || channel === 'both') && !selectedTemplate && (
+          {channel === 'email' && !selectedTemplate && (
             <div className="animate-fade-in">
               <input
                 type="text"
@@ -656,7 +691,8 @@ export default function Home() {
                       ? `Email Template: ${selectedEmailTemplate.name}`
                       : channel === 'whatsapp' ? 'WhatsApp Message'
                         : channel === 'email' ? 'Email Message'
-                          : 'Mensaje Múltiple'}
+                          : channel === 'sms' ? 'Mensaje SMS'
+                            : 'Mensaje'}
                 </span>
               </div>
               {/* WhatsApp Templates Button */}
@@ -986,7 +1022,7 @@ export default function Home() {
                   </button>
                 )}
                 {/* Vista previa para email libre (sin plantilla) */}
-                {!selectedTemplate && !selectedEmailTemplate && (channel === 'email' || channel === 'both') && content.trim() && (
+                {!selectedTemplate && !selectedEmailTemplate && channel === 'email' && content.trim() && (
                   <button
                     onClick={() => setShowEmailPreview(true)}
                     className="px-4 py-2 rounded-xl bg-purple-50 border border-purple-200 text-[#8B5A9B] hover:bg-purple-100 transition-all flex items-center gap-2 text-sm font-medium"

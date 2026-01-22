@@ -11,7 +11,7 @@ from fastapi.staticfiles import StaticFiles
 
 from config import get_settings
 from database import init_db
-from routers import contacts_router, templates_router, messages_router, history_router, whatsapp_router, assistant_router
+from routers import contacts_router, templates_router, messages_router, history_router, whatsapp_router, assistant_router, sms_router
 
 # Configure logging
 logging.basicConfig(
@@ -55,10 +55,10 @@ async def lifespan(app: FastAPI):
     else:
         print("[WARN] Webhook Asistente IA NO configurado")
     
-    if settings.contacts_api_url:
-        print("[OK] API de Contactos configurada")
+    if settings.owo_api_login_url and settings.owo_api_contacts_url:
+        print("[OK] API OWO de Contactos configurada")
     else:
-        print("[WARN] API de Contactos NO configurada (usando datos mock)")
+        print("[WARN] API OWO de Contactos NO configurada")
     
     # WhatsApp Direct API
     if settings.whatsapp_access_token and settings.whatsapp_phone_number_id:
@@ -101,6 +101,7 @@ app.include_router(messages_router)
 app.include_router(history_router)
 app.include_router(whatsapp_router)
 app.include_router(assistant_router)
+app.include_router(sms_router)
 
 
 @app.get("/")
@@ -130,7 +131,7 @@ async def health_check():
             "email": bool(settings.webhook_email),
             "assistant": bool(settings.webhook_assistant)
         },
-        "contacts_api": bool(settings.contacts_api_url)
+        "contacts_api": bool(settings.owo_api_login_url and settings.owo_api_contacts_url)
     }
 
 
@@ -155,9 +156,11 @@ async def get_config():
                 "url_preview": settings.webhook_email[:50] + "..." if settings.webhook_email else None
             }
         },
-        "contacts_api": {
-            "configured": bool(settings.contacts_api_url),
-            "url_preview": settings.contacts_api_url[:50] + "..." if settings.contacts_api_url else None
+        "owo_api": {
+            "configured": bool(settings.owo_api_login_url and settings.owo_api_contacts_url),
+            "login_url": settings.owo_api_login_url if settings.owo_api_login_url else None,
+            "contacts_url": settings.owo_api_contacts_url if settings.owo_api_contacts_url else None,
+            "auth_email": settings.owo_api_email if settings.owo_api_email else None
         },
         "whatsapp_business_api": {
             "access_token_configured": bool(settings.whatsapp_access_token),

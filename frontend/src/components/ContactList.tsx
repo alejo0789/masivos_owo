@@ -6,9 +6,11 @@ import { Contact, getContacts, getDepartments } from '@/lib/api';
 interface ContactListProps {
     selectedContacts: Contact[];
     onSelectionChange: (contacts: Contact[]) => void;
-    channel?: 'whatsapp' | 'email' | 'both';
+    channel?: 'whatsapp' | 'email' | 'sms' | 'both';
     selectedTemplate?: any;
 }
+
+const CONTACTS_PER_PAGE = 15;
 
 export default function ContactList({ selectedContacts, onSelectionChange, channel = 'both', selectedTemplate }: ContactListProps) {
     const [contacts, setContacts] = useState<Contact[]>([]);
@@ -17,6 +19,10 @@ export default function ContactList({ selectedContacts, onSelectionChange, chann
     const [search, setSearch] = useState('');
     const [departmentFilter, setDepartmentFilter] = useState('');
     const [error, setError] = useState('');
+    const [totalContacts, setTotalContacts] = useState(0);
+
+    // Pagination
+    const [currentPage, setCurrentPage] = useState(1);
 
     // Manual contact input
     const [manualInput, setManualInput] = useState('');
@@ -28,15 +34,21 @@ export default function ContactList({ selectedContacts, onSelectionChange, chann
         loadData();
     }, []);
 
+    // Reset to page 1 when filters change
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [search, departmentFilter]);
+
     const loadData = async () => {
         try {
             setLoading(true);
             setError('');
             const [contactsData, depsData] = await Promise.all([
-                getContacts({ limit: 500 }),
+                getContacts({ limit: 1000 }), // Fetch all contacts
                 getDepartments(),
             ]);
             setContacts(contactsData.contacts);
+            setTotalContacts(contactsData.total);
             setDepartments(depsData);
         } catch (err) {
             setError('Error al cargar contactos');
@@ -58,6 +70,12 @@ export default function ContactList({ selectedContacts, onSelectionChange, chann
             return matchesSearch && matchesDepartment;
         });
     }, [contacts, search, departmentFilter]);
+
+    // Pagination calculations
+    const totalPages = Math.ceil(filteredContacts.length / CONTACTS_PER_PAGE);
+    const startIndex = (currentPage - 1) * CONTACTS_PER_PAGE;
+    const endIndex = startIndex + CONTACTS_PER_PAGE;
+    const paginatedContacts = filteredContacts.slice(startIndex, endIndex);
 
     const selectedIds = useMemo(() => new Set(selectedContacts.map(c => c.id)), [selectedContacts]);
 
@@ -85,8 +103,29 @@ export default function ContactList({ selectedContacts, onSelectionChange, chann
         }
     };
 
+    const handleSelectCurrentPage = () => {
+        const pageContacts = paginatedContacts;
+        const allPageSelected = pageContacts.every(c => selectedIds.has(c.id));
+
+        if (allPageSelected) {
+            const pageIds = new Set(pageContacts.map(c => c.id));
+            onSelectionChange(selectedContacts.filter(c => !pageIds.has(c.id)));
+        } else {
+            const newSelection = [...selectedContacts];
+            pageContacts.forEach(contact => {
+                if (!selectedIds.has(contact.id)) {
+                    newSelection.push(contact);
+                }
+            });
+            onSelectionChange(newSelection);
+        }
+    };
+
     const allFilteredSelected = filteredContacts.length > 0 &&
         filteredContacts.every(c => selectedIds.has(c.id));
+
+    const allPageSelected = paginatedContacts.length > 0 &&
+        paginatedContacts.every(c => selectedIds.has(c.id));
 
     const getInitials = (name: string) => {
         return name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
@@ -127,6 +166,41 @@ export default function ContactList({ selectedContacts, onSelectionChange, chann
         setManualContactName('');
         setInputError('');
         setShowManualInput(false); // Close the form after adding
+    };
+
+    const goToPage = (page: number) => {
+        if (page >= 1 && page <= totalPages) {
+            setCurrentPage(page);
+        }
+    };
+
+    // Generate page numbers for pagination
+    const getPageNumbers = () => {
+        const pages: (number | string)[] = [];
+        const maxVisiblePages = 5;
+
+        if (totalPages <= maxVisiblePages) {
+            for (let i = 1; i <= totalPages; i++) {
+                pages.push(i);
+            }
+        } else {
+            if (currentPage <= 3) {
+                for (let i = 1; i <= 4; i++) pages.push(i);
+                pages.push('...');
+                pages.push(totalPages);
+            } else if (currentPage >= totalPages - 2) {
+                pages.push(1);
+                pages.push('...');
+                for (let i = totalPages - 3; i <= totalPages; i++) pages.push(i);
+            } else {
+                pages.push(1);
+                pages.push('...');
+                for (let i = currentPage - 1; i <= currentPage + 1; i++) pages.push(i);
+                pages.push('...');
+                pages.push(totalPages);
+            }
+        }
+        return pages;
     };
 
     if (loading) {
@@ -179,7 +253,7 @@ export default function ContactList({ selectedContacts, onSelectionChange, chann
                         </div>
                         <div>
                             <h3 className="font-bold text-gray-900 text-lg">Contactos</h3>
-                            <p className="text-gray-400 text-xs">{contacts.length} disponibles</p>
+                            <p className="text-gray-400 text-xs">{filteredContacts.length} de {totalContacts} disponibles</p>
                         </div>
                     </div>
                     <div className="badge badge-purple">
@@ -221,7 +295,7 @@ export default function ContactList({ selectedContacts, onSelectionChange, chann
                     >
                         <option value="">🏢 Todos los departamentos</option>
                         {departments.map(dep => (
-                            <option key={dep} value={dep}>{dep}</option>
+                            <option key={dep} value={dep}>{dep === 'Apostador' ? '🎰 Apostador' : dep === 'Operacional' ? '⚙️ Operacional' : dep}</option>
                         ))}
                     </select>
                 )}
@@ -272,7 +346,7 @@ export default function ContactList({ selectedContacts, onSelectionChange, chann
                                         type="text"
                                         className="input flex-1 text-sm"
                                         placeholder={
-                                            selectedTemplate || channel === 'whatsapp'
+                                            selectedTemplate || channel === 'whatsapp' || channel === 'sms'
                                                 ? "📱 3001234567"
                                                 : channel === 'email'
                                                     ? "📧 Email"
@@ -283,11 +357,11 @@ export default function ContactList({ selectedContacts, onSelectionChange, chann
                                             let value = e.target.value;
 
                                             // If it's a phone field and user deletes everything, restore +57
-                                            if ((selectedTemplate || channel === 'whatsapp') && value === '') {
+                                            if ((selectedTemplate || channel === 'whatsapp' || channel === 'sms') && value === '') {
                                                 value = '+57';
                                             }
                                             // If it's a phone field and doesn't start with +, add +57
-                                            else if ((selectedTemplate || channel === 'whatsapp') && !value.startsWith('+')) {
+                                            else if ((selectedTemplate || channel === 'whatsapp' || channel === 'sms') && !value.startsWith('+')) {
                                                 value = '+57' + value;
                                             }
 
@@ -296,7 +370,7 @@ export default function ContactList({ selectedContacts, onSelectionChange, chann
                                         }}
                                         onFocus={(e) => {
                                             // When focusing on phone field, add +57 if empty
-                                            if ((selectedTemplate || channel === 'whatsapp') && !e.target.value) {
+                                            if ((selectedTemplate || channel === 'whatsapp' || channel === 'sms') && !e.target.value) {
                                                 setManualInput('+57');
                                             }
                                         }}
@@ -320,24 +394,83 @@ export default function ContactList({ selectedContacts, onSelectionChange, chann
                 </div>
             </div>
 
-            {/* Select All */}
+            {/* Pagination Header & Select All */}
             <div className="px-5 py-3 border-b border-gray-100 bg-gray-50/50">
-                <label className="flex items-center gap-4 cursor-pointer group">
-                    <input
-                        type="checkbox"
-                        className="checkbox"
-                        checked={allFilteredSelected}
-                        onChange={handleSelectAll}
-                    />
-                    <span className="text-sm text-gray-500 group-hover:text-gray-700 transition-colors">
-                        Seleccionar todos ({filteredContacts.length})
-                    </span>
-                    {allFilteredSelected && (
-                        <span className="ml-auto badge badge-success text-xs">
-                            ✓ Todos
+                <div className="flex items-center justify-between">
+                    <label className="flex items-center gap-3 cursor-pointer group">
+                        <input
+                            type="checkbox"
+                            className="checkbox"
+                            checked={allPageSelected}
+                            onChange={handleSelectCurrentPage}
+                        />
+                        <span className="text-sm text-gray-500 group-hover:text-gray-700 transition-colors">
+                            Seleccionar página ({paginatedContacts.length})
                         </span>
-                    )}
-                </label>
+                    </label>
+
+                    {/* Pagination Controls */}
+                    <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-400">
+                            {startIndex + 1}-{Math.min(endIndex, filteredContacts.length)} de {filteredContacts.length}
+                        </span>
+                        <div className="flex items-center gap-1">
+                            <button
+                                onClick={() => goToPage(currentPage - 1)}
+                                disabled={currentPage === 1}
+                                className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-500 hover:bg-purple-100 hover:text-purple-600 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <polyline points="15 18 9 12 15 6" />
+                                </svg>
+                            </button>
+
+                            {getPageNumbers().map((page, idx) => (
+                                <button
+                                    key={idx}
+                                    onClick={() => typeof page === 'number' && goToPage(page)}
+                                    disabled={page === '...'}
+                                    className={`min-w-[32px] h-8 px-2 rounded-lg text-sm font-medium transition-all ${page === currentPage
+                                        ? 'bg-gradient-to-r from-[#8B5A9B] to-[#9D4EDD] text-white shadow-md'
+                                        : page === '...'
+                                            ? 'text-gray-400 cursor-default'
+                                            : 'text-gray-600 hover:bg-purple-100 hover:text-purple-600'
+                                        }`}
+                                >
+                                    {page}
+                                </button>
+                            ))}
+
+                            <button
+                                onClick={() => goToPage(currentPage + 1)}
+                                disabled={currentPage === totalPages}
+                                className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-500 hover:bg-purple-100 hover:text-purple-600 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <polyline points="9 18 15 12 9 6" />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Select All Filtered */}
+                {filteredContacts.length > CONTACTS_PER_PAGE && (
+                    <div className="mt-2 pt-2 border-t border-gray-100">
+                        <button
+                            onClick={handleSelectAll}
+                            className={`text-xs font-medium transition-colors ${allFilteredSelected
+                                ? 'text-red-500 hover:text-red-600'
+                                : 'text-purple-600 hover:text-purple-700'
+                                }`}
+                        >
+                            {allFilteredSelected
+                                ? `✕ Deseleccionar todos los ${filteredContacts.length} contactos`
+                                : `✓ Seleccionar todos los ${filteredContacts.length} contactos filtrados`
+                            }
+                        </button>
+                    </div>
+                )}
             </div>
 
             {/* Manual Contacts Section */}
@@ -396,7 +529,7 @@ export default function ContactList({ selectedContacts, onSelectionChange, chann
 
             {/* Contact List */}
             <div className="flex-1 overflow-y-auto bg-white">
-                {filteredContacts.length === 0 ? (
+                {paginatedContacts.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-16 text-gray-400">
                         <div className="w-20 h-20 rounded-2xl bg-purple-50 flex items-center justify-center mb-4">
                             <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#8B5A9B" strokeWidth="1.5">
@@ -411,7 +544,7 @@ export default function ContactList({ selectedContacts, onSelectionChange, chann
                     </div>
                 ) : (
                     <ul>
-                        {filteredContacts.map((contact) => {
+                        {paginatedContacts.map((contact) => {
                             const isSelected = selectedIds.has(contact.id);
                             return (
                                 <li
@@ -429,7 +562,17 @@ export default function ContactList({ selectedContacts, onSelectionChange, chann
                                         {getInitials(contact.name)}
                                     </div>
                                     <div className="flex-1 min-w-0">
-                                        <p className="font-semibold text-gray-900 text-sm truncate">{contact.name}</p>
+                                        <div className="flex items-center gap-2">
+                                            <p className="font-semibold text-gray-900 text-sm truncate">{contact.name}</p>
+                                            {contact.department && (
+                                                <span className={`text-xs px-2 py-0.5 rounded-full ${contact.department === 'Apostador'
+                                                    ? 'bg-amber-100 text-amber-700'
+                                                    : 'bg-blue-100 text-blue-700'
+                                                    }`}>
+                                                    {contact.department === 'Apostador' ? '🎰' : '⚙️'} {contact.department}
+                                                </span>
+                                            )}
+                                        </div>
                                         <div className="flex items-center gap-3 text-xs text-gray-400 mt-0.5">
                                             {contact.phone && (
                                                 <span className="flex items-center gap-1">
@@ -458,6 +601,47 @@ export default function ContactList({ selectedContacts, onSelectionChange, chann
                     </ul>
                 )}
             </div>
+
+            {/* Bottom Pagination */}
+            {totalPages > 1 && (
+                <div className="px-5 py-3 border-t border-gray-100 bg-gray-50/50">
+                    <div className="flex items-center justify-center gap-2">
+                        <button
+                            onClick={() => goToPage(1)}
+                            disabled={currentPage === 1}
+                            className="px-3 py-1.5 rounded-lg text-xs font-medium text-gray-500 hover:bg-purple-100 hover:text-purple-600 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                        >
+                            « Primera
+                        </button>
+                        <button
+                            onClick={() => goToPage(currentPage - 1)}
+                            disabled={currentPage === 1}
+                            className="px-3 py-1.5 rounded-lg text-xs font-medium text-gray-500 hover:bg-purple-100 hover:text-purple-600 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                        >
+                            ‹ Anterior
+                        </button>
+
+                        <span className="px-4 py-1.5 rounded-lg text-xs font-semibold bg-gradient-to-r from-[#8B5A9B] to-[#9D4EDD] text-white">
+                            Página {currentPage} de {totalPages}
+                        </span>
+
+                        <button
+                            onClick={() => goToPage(currentPage + 1)}
+                            disabled={currentPage === totalPages}
+                            className="px-3 py-1.5 rounded-lg text-xs font-medium text-gray-500 hover:bg-purple-100 hover:text-purple-600 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                        >
+                            Siguiente ›
+                        </button>
+                        <button
+                            onClick={() => goToPage(totalPages)}
+                            disabled={currentPage === totalPages}
+                            className="px-3 py-1.5 rounded-lg text-xs font-medium text-gray-500 hover:bg-purple-100 hover:text-purple-600 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                        >
+                            Última »
+                        </button>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

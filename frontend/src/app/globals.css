@@ -728,6 +728,13 @@ body::before {
   box-shadow: 0 4px 20px var(--owo-purple-glow);
 }
 
+.channel-btn.active-sms {
+  background: linear-gradient(135deg, rgba(147, 51, 234, 0.1) 0%, white 100%);
+  border-color: #9333ea;
+  color: #7e22ce;
+  box-shadow: 0 4px 20px rgba(147, 51, 234, 0.2);
+}
+
 /* ===== MESSAGE COMPOSER AREA ===== */
 .composer-container {
   background: var(--card-bg);
@@ -764,6 +771,10 @@ body::before {
   background: linear-gradient(135deg, rgba(139, 90, 155, 0.15) 0%, rgba(139, 90, 155, 0.05) 100%);
 }
 
+.composer-header.sms {
+  background: linear-gradient(135deg, rgba(147, 51, 234, 0.15) 0%, rgba(147, 51, 234, 0.05) 100%);
+}
+
 .composer-body {
   padding: 20px;
   min-height: 200px;
@@ -797,6 +808,11 @@ body::before {
 .send-btn-whatsapp {
   background: linear-gradient(135deg, #25D366 0%, #128C7E 100%);
   box-shadow: 0 4px 20px rgba(37, 211, 102, 0.35);
+}
+
+.send-btn-sms {
+  background: linear-gradient(135deg, #9333ea 0%, #7e22ce 100%);
+  box-shadow: 0 4px 20px rgba(147, 51, 234, 0.35);
 }
 
 .send-btn-email {

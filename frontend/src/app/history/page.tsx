@@ -146,7 +146,7 @@ export default function HistoryPage() {
                         <option value="">📡 Todos los canales</option>
                         <option value="whatsapp">📱 WhatsApp</option>
                         <option value="email">📧 Email</option>
-                        <option value="both">🔄 Ambos</option>
+                        <option value="sms">💬 SMS</option>
                     </select>
                     <select className="select w-auto min-w-[160px]" value={status} onChange={(e) => setStatus(e.target.value)}>
                         <option value="">📋 Todos los estados</option>

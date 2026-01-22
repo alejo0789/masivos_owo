@@ -9,8 +9,11 @@ class Contact(BaseModel):
     name: str
     phone: Optional[str] = None
     email: Optional[str] = None
-    department: Optional[str] = None
+    department: Optional[str] = None  # "Apostador" o "Operacional"
     position: Optional[str] = None
+    is_customer: Optional[bool] = None  # True = Apostador, False = Operacional
+    customer_name: Optional[str] = None
+    state: Optional[str] = None
 
 
 class ContactsResponse(BaseModel):

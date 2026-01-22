@@ -14,7 +14,7 @@ router = APIRouter(prefix="/history", tags=["history"])
 @router.get("", response_model=List[MessageResponse])
 async def get_history(
     search: Optional[str] = Query(None, description="Search by recipient name, email or phone"),
-    channel: Optional[str] = Query(None, pattern="^(whatsapp|email|both)$"),
+    channel: Optional[str] = Query(None, pattern="^(whatsapp|email|sms|both)$"),
     status: Optional[str] = Query(None, pattern="^(sent|failed|pending)$"),
     date_from: Optional[datetime] = Query(None, description="Filter from this date"),
     date_to: Optional[datetime] = Query(None, description="Filter until this date"),
@@ -104,6 +104,13 @@ async def get_stats(
     )
     email = email_result.scalar() or 0
     
+    sms_result = await db.execute(
+        select(func.count(MessageLog.id)).where(
+            and_(MessageLog.sent_at >= cutoff_date, MessageLog.channel == "sms")
+        )
+    )
+    sms = sms_result.scalar() or 0
+    
     return {
         "period_days": days,
         "total": total,
@@ -112,14 +119,15 @@ async def get_stats(
         "success_rate": round((sent / total * 100) if total > 0 else 0, 2),
         "by_channel": {
             "whatsapp": whatsapp,
-            "email": email
+            "email": email,
+            "sms": sms
         }
     }
 
 
 @router.get("/count")
 async def get_history_count(
-    channel: Optional[str] = Query(None, pattern="^(whatsapp|email|both)$"),
+    channel: Optional[str] = Query(None, pattern="^(whatsapp|email|sms|both)$"),
     status: Optional[str] = Query(None, pattern="^(sent|failed|pending)$"),
     db: AsyncSession = Depends(get_db)
 ):

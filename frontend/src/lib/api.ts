@@ -10,8 +10,11 @@ export interface Contact {
     name: string;
     phone?: string;
     email?: string;
-    department?: string;
+    department?: string;  // "Apostador" o "Operacional"
     position?: string;
+    is_customer?: boolean;  // true = Apostador, false = Operacional
+    customer_name?: string | null;
+    state?: string;
 }
 
 export interface ContactsResponse {
@@ -59,6 +62,7 @@ export interface Stats {
     by_channel: {
         whatsapp: number;
         email: number;
+        sms: number;
     };
 }
 
@@ -404,3 +408,50 @@ export async function generateTemplate(data: AssistantRequest): Promise<any> {
     });
     return handleResponse<any>(response);
 }
+
+// SMS API
+export interface SMSRequest {
+    phone: string;
+    message: string;
+    test?: boolean;
+}
+
+export interface BulkSMSRequest {
+    recipients: Array<{ phone: string; name?: string }>;
+    message: string;
+    test?: boolean;
+}
+
+export interface SMSResponse {
+    success: boolean;
+    total?: number;
+    sent?: number;
+    failed?: number;
+    messages?: any[];
+    error?: string;
+    credits_used?: number;
+}
+
+export async function sendSMS(data: SMSRequest): Promise<SMSResponse> {
+    const response = await fetch(`${API_URL}/sms/send`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+    });
+    return handleResponse<SMSResponse>(response);
+}
+
+export async function sendBulkSMS(data: BulkSMSRequest): Promise<SMSResponse> {
+    const response = await fetch(`${API_URL}/sms/send-bulk`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+    });
+    return handleResponse<SMSResponse>(response);
+}
+
+export async function getSMSCredits(): Promise<{ success: boolean; credits: number }> {
+    const response = await fetch(`${API_URL}/sms/credits`);
+    return handleResponse<{ success: boolean; credits: number }>(response);
+}
+
