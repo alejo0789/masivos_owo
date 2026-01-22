@@ -58,7 +58,7 @@ export default function TemplateModal({ template, onClose, onSaved }: TemplateMo
                     <!-- Header -->
                     <tr>
                         <td style="background: linear-gradient(135deg, #8B5A9B 0%, #6B4478 100%); padding: 40px 20px; text-align: center;">
-                            <img src="/logo-mails-light.png" alt="OWO" style="max-width: 200px; height: auto;" />
+                            <img src="https://owo-public-files.s3.amazonaws.com/mails/logo-mails-light.png" alt="OWO" style="max-width: 200px; height: auto;" />
                         </td>
                     </tr>
                     

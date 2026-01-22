@@ -1,7 +1,6 @@
 'use client';
 
 import Link from 'next/link';
-import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 
 const navItems = [
@@ -81,8 +80,9 @@ export default function Sidebar() {
                         <div className="w-14 h-14 rounded-2xl overflow-hidden bg-white/20 flex items-center justify-center shadow-lg" style={{
                             boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)'
                         }}>
-                            <Image
-                                src="/owo-logo.webp"
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                                src={`${process.env.NEXT_PUBLIC_BASE_PATH || ''}/owo-logo.webp`}
                                 alt="OWO"
                                 width={56}
                                 height={56}
