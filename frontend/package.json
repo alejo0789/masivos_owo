@@ -5,12 +5,7 @@
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build",
-    "postbuild": "npm run copy-assets",
-    "copy-assets": "npm run copy-public && npm run copy-static",
-    "copy-public": "xcopy public .next\\standalone\\public /E /I /Y 2>nul || cp -r public .next/standalone/public",
-    "copy-static": "xcopy .next\\static .next\\standalone\\.next\\static /E /I /Y 2>nul || cp -r .next/static .next/standalone/.next/static",
-    "start": "node .next/standalone/server.js",
-    "start:dev": "next dev",
+    "start": "next start -p 3000",
     "lint": "eslint"
   },
   "dependencies": {

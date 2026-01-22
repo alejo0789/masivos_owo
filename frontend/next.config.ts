@@ -11,9 +11,6 @@ const nextConfig: NextConfig = {
 
   // Trailing slash - set to true for Apache compatibility
   trailingSlash: true,
-
-  // Output configuration
-  output: 'standalone',
 };
 
 export default nextConfig;
