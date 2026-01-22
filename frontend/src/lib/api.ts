@@ -368,3 +368,39 @@ export async function getHistoryCount(params?: {
     const response = await fetch(url);
     return handleResponse<{ count: number }>(response);
 }
+
+// AI Assistant
+export interface AssistantMessage {
+    role: 'user' | 'assistant';
+    content: string;
+}
+
+export interface AssistantRequest {
+    messages: AssistantMessage[];
+    context?: 'template' | 'bulk_message';
+    sessionId?: string;
+}
+
+export interface AssistantResponse {
+    message: string;
+    html_preview?: string;
+    is_final: boolean;
+}
+
+export async function chatWithAssistant(data: AssistantRequest): Promise<AssistantResponse> {
+    const response = await fetch(`${API_URL}/assistant/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+    });
+    return handleResponse<AssistantResponse>(response);
+}
+
+export async function generateTemplate(data: AssistantRequest): Promise<any> {
+    const response = await fetch(`${API_URL}/assistant/generate-template`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+    });
+    return handleResponse<any>(response);
+}

@@ -11,7 +11,7 @@ from fastapi.staticfiles import StaticFiles
 
 from config import get_settings
 from database import init_db
-from routers import contacts_router, templates_router, messages_router, history_router, whatsapp_router
+from routers import contacts_router, templates_router, messages_router, history_router, whatsapp_router, assistant_router
 
 # Configure logging
 logging.basicConfig(
@@ -49,6 +49,11 @@ async def lifespan(app: FastAPI):
         print("[OK] Webhook Email configurado")
     else:
         print("[WARN] Webhook Email NO configurado")
+    
+    if settings.webhook_assistant:
+        print("[OK] Webhook Asistente IA configurado")
+    else:
+        print("[WARN] Webhook Asistente IA NO configurado")
     
     if settings.contacts_api_url:
         print("[OK] API de Contactos configurada")
@@ -95,6 +100,7 @@ app.include_router(templates_router)
 app.include_router(messages_router)
 app.include_router(history_router)
 app.include_router(whatsapp_router)
+app.include_router(assistant_router)
 
 
 @app.get("/")
@@ -121,7 +127,8 @@ async def health_check():
         "status": "healthy",
         "webhooks": {
             "whatsapp": bool(settings.webhook_whatsapp),
-            "email": bool(settings.webhook_email)
+            "email": bool(settings.webhook_email),
+            "assistant": bool(settings.webhook_assistant)
         },
         "contacts_api": bool(settings.contacts_api_url)
     }

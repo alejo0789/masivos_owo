@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     # Webhooks
     webhook_whatsapp: str = ""
     webhook_email: str = ""
+    webhook_assistant: str = ""
     
     # External API
     contacts_api_url: str = ""

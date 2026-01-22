@@ -10,7 +10,9 @@ import {
   WhatsAppTemplate,
   getApprovedWhatsAppTemplates,
   sendWhatsAppTemplate,
-  WhatsAppBulkSendResponse
+  WhatsAppBulkSendResponse,
+  Template,
+  getTemplates
 } from '@/lib/api';
 import ContactList from '@/components/ContactList';
 
@@ -30,13 +32,30 @@ export default function Home() {
   const [selectedTemplate, setSelectedTemplate] = useState<WhatsAppTemplate | null>(null);
   const [loadingTemplates, setLoadingTemplates] = useState(false);
 
+  // Email Templates
+  const [emailTemplates, setEmailTemplates] = useState<Template[]>([]);
+  const [showEmailTemplates, setShowEmailTemplates] = useState(false);
+  const [selectedEmailTemplate, setSelectedEmailTemplate] = useState<Template | null>(null);
+  const [loadingEmailTemplates, setLoadingEmailTemplates] = useState(false);
+  const [previewEmailTemplate, setPreviewEmailTemplate] = useState<Template | null>(null);
+  const [showEmailPreview, setShowEmailPreview] = useState(false);
+
   // File upload
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const contentEditableRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     loadTemplates();
+    loadEmailTemplates();
   }, []);
+
+  useEffect(() => {
+    // Update contentEditable only when template changes, not on every content change
+    if (contentEditableRef.current && selectedEmailTemplate) {
+      contentEditableRef.current.innerHTML = content;
+    }
+  }, [selectedEmailTemplate]);
 
   const loadTemplates = async () => {
     try {
@@ -49,6 +68,18 @@ export default function Home() {
       console.error('Error loading WhatsApp templates:', err);
     } finally {
       setLoadingTemplates(false);
+    }
+  };
+
+  const loadEmailTemplates = async () => {
+    try {
+      setLoadingEmailTemplates(true);
+      const templates = await getTemplates({ channel: 'email' });
+      setEmailTemplates(templates);
+    } catch (err) {
+      console.error('Error loading email templates:', err);
+    } finally {
+      setLoadingEmailTemplates(false);
     }
   };
 
@@ -85,6 +116,143 @@ export default function Home() {
   const clearTemplate = () => {
     setSelectedTemplate(null);
     setContent('');
+  };
+
+  const applyEmailTemplate = (template: Template) => {
+    // Extract content from HTML if needed
+    let templateContent = template.content;
+
+    // If it's an HTML template, extract the body content
+    if (templateContent.trim().startsWith('<!DOCTYPE html>') || templateContent.trim().startsWith('<html')) {
+      const contentMatch = templateContent.match(/<!-- Content -->[\s\S]*?<td[^>]*>([\s\S]*?)<\/td>[\s\S]*?<!-- Footer -->/);
+      if (contentMatch && contentMatch[1]) {
+        templateContent = contentMatch[1].trim();
+      }
+    }
+
+    setSubject(template.subject || '');
+    setContent(templateContent);
+    setSelectedEmailTemplate(template);
+    setChannel('email');
+    setShowEmailTemplates(false);
+  };
+
+  const clearEmailTemplate = () => {
+    setSelectedEmailTemplate(null);
+    setSubject('');
+    setContent('');
+  };
+
+  // Handle channel change - clear templates from other channels
+  const handleChannelChange = (newChannel: 'whatsapp' | 'email' | 'both') => {
+    // If changing away from email, clear email template
+    if (newChannel === 'whatsapp' && selectedEmailTemplate) {
+      setSelectedEmailTemplate(null);
+      setSubject('');
+      setContent('');
+    }
+    // If changing away from whatsapp, clear whatsapp template
+    if (newChannel === 'email' && selectedTemplate) {
+      setSelectedTemplate(null);
+      setContent('');
+    }
+    // If changing to 'both', clear both templates
+    if (newChannel === 'both') {
+      if (selectedEmailTemplate) {
+        setSelectedEmailTemplate(null);
+      }
+      if (selectedTemplate) {
+        setSelectedTemplate(null);
+      }
+      setSubject('');
+      setContent('');
+    }
+    setChannel(newChannel);
+  };
+
+  const extractTextFromHtml = (html: string): string => {
+    // Remove HTML tags and get clean text
+    const text = html.replace(/<[^>]*>/g, '');
+    // Decode HTML entities
+    const textarea = document.createElement('textarea');
+    textarea.innerHTML = text;
+    return textarea.value;
+  };
+
+  const getEmailTemplatePreview = (template: Template): string => {
+    let preview = template.content;
+
+    // If it's HTML, extract clean text
+    if (preview.trim().startsWith('<!DOCTYPE html>') || preview.trim().startsWith('<html')) {
+      const contentMatch = preview.match(/<!-- Content -->[\s\S]*?<td[^>]*>([\s\S]*?)<\/td>[\s\S]*?<!-- Footer -->/);
+      if (contentMatch && contentMatch[1]) {
+        preview = extractTextFromHtml(contentMatch[1]);
+      } else {
+        preview = extractTextFromHtml(preview);
+      }
+    }
+
+    return preview.length > 100 ? preview.substring(0, 100) + '...' : preview;
+  };
+
+  const generateFullEmailHtml = (bodyContent: string, emailSubject: string): string => {
+    // Use public S3 URL for logo to ensure it works in emails
+    const logoUrl = 'https://owo-public-files.s3.amazonaws.com/mails/logo-mails-light.png';
+
+    return `<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="light only">
+    <meta name="supported-color-schemes" content="light">
+    <title>${emailSubject || 'Email de OWO'}</title>
+    <style>
+        :root { color-scheme: light only; }
+        body { background-color: #f5f5f5 !important; }
+    </style>
+</head>
+<body style="margin: 0 !important; padding: 0 !important; font-family: Arial, sans-serif !important; background-color: #f5f5f5 !important;">
+    <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #f5f5f5 !important; padding: 20px 0;">
+        <tr>
+            <td align="center">
+                <table width="600" cellpadding="0" cellspacing="0" border="0" style="background-color: #ffffff !important; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                    <!-- Header -->
+                    <tr>
+                        <td bgcolor="#8B5A9B" style="background-color: #8B5A9B !important; padding: 5px; text-align: center;">
+                            <img src="${logoUrl}" alt="OWO" width="200" style="max-width: 200px; height: auto; display: block; margin: 0 auto;" />
+                        </td>
+                    </tr>
+                    
+                    <!-- Content -->
+                    <tr>
+                        <td bgcolor="#ffffff" style="background-color: #ffffff !important; padding: 40px 30px; color: #333333 !important; line-height: 1.6;">
+                            <div style="color: #333333 !important;">
+                                ${bodyContent}
+                            </div>
+                        </td>
+                    </tr>
+                    
+                    <!-- Footer -->
+                    <tr>
+                        <td bgcolor="#f8f8f8" style="background-color: #f8f8f8 !important; padding: 30px; text-align: center; border-top: 1px solid #e0e0e0;">
+                            <p style="margin: 0 0 10px 0; font-size: 14px; color: #666666 !important;">
+                                Este buzón de correo es solo para envío de información, por favor no lo respondas porque no podrá ser recibido y atendido.
+                            </p>
+                            <p style="margin: 10px 0 0 0; font-size: 14px; color: #666666 !important;">
+                                Equipo <strong style="color: #8B5A9B !important;">OWO</strong>
+                            </p>
+                            <p style="margin: 15px 0 0 0; font-size: 12px; color: #999999 !important;">
+                                © 2025 <strong>OWO</strong> by <strong>Owo</strong>tech. Todos los derechos reservados.
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>`;
   };
 
   const handleFileUpload = async (files: FileList | null) => {
@@ -127,7 +295,7 @@ export default function Home() {
     }
   };
 
-  const canSend = selectedContacts.length > 0 && (content.trim().length > 0 || selectedTemplate);
+  const canSend = selectedContacts.length > 0 && (content.trim().length > 0 || selectedTemplate || selectedEmailTemplate);
 
   const handleSend = async () => {
     if (!canSend) return;
@@ -203,10 +371,16 @@ export default function Home() {
           email: c.email,
         }));
 
+        // For email channel, wrap content in full HTML template
+        let emailContent = content;
+        if (channel === 'email' || channel === 'both') {
+          emailContent = generateFullEmailHtml(content, subject || 'Mensaje de OWO');
+        }
+
         const response = await sendBulkMessages({
           recipients,
           subject: subject || undefined,
-          content,
+          content: emailContent,
           channel,
           attachments: uploadedFiles.map(f => f.name),
         });
@@ -258,7 +432,7 @@ export default function Home() {
   const contactsWithPhone = selectedContacts.filter(c => c.phone).length;
 
   return (
-    <div className="p-6 lg:p-8 h-screen flex flex-col relative overflow-hidden">
+    <div className="p-6 lg:p-8 min-h-screen flex flex-col relative overflow-auto">
       {/* Background decorative elements */}
       <div className="absolute top-10 right-20 w-96 h-96 rounded-full bg-[#8B5A9B] opacity-5 blur-[120px] pointer-events-none" />
       <div className="absolute bottom-20 left-10 w-64 h-64 rounded-full bg-[#00B4D8] opacity-5 blur-[100px] pointer-events-none" />
@@ -380,7 +554,7 @@ export default function Home() {
       <div className="flex-1 grid grid-cols-1 xl:grid-cols-5 gap-6 min-h-0 relative z-10">
 
         {/* LEFT: Message Composer (3 cols) */}
-        <div className="xl:col-span-3 flex flex-col gap-5">
+        <div className="xl:col-span-3 flex flex-col gap-5 overflow-y-auto pr-2">
 
           {/* Channel Selection - Hidden when template selected */}
           {!selectedTemplate && (
@@ -392,7 +566,7 @@ export default function Home() {
               ].map((option) => (
                 <button
                   key={option.value}
-                  onClick={() => setChannel(option.value as 'whatsapp' | 'email' | 'both')}
+                  onClick={() => handleChannelChange(option.value as 'whatsapp' | 'email' | 'both')}
                   className={`channel-btn ${channel === option.value ? option.activeClass : ''}`}
                 >
                   <span className="text-xl">{option.icon}</span>
@@ -473,35 +647,57 @@ export default function Home() {
             <div className={styles.header}>
               <div className="flex items-center gap-3">
                 <span className="text-lg">
-                  {selectedTemplate ? '📱' : channel === 'whatsapp' ? '💬' : channel === 'email' ? '📧' : '📨'}
+                  {selectedTemplate ? '📱' : selectedEmailTemplate ? '📧' : channel === 'whatsapp' ? '💬' : channel === 'email' ? '📧' : '📨'}
                 </span>
                 <span className={`font-semibold ${channel === 'whatsapp' || selectedTemplate ? 'text-white' : 'text-gray-800'}`}>
                   {selectedTemplate
                     ? `WhatsApp Template: ${selectedTemplate.name}`
-                    : channel === 'whatsapp' ? 'WhatsApp Message'
-                      : channel === 'email' ? 'Email Message'
-                        : 'Mensaje Múltiple'}
+                    : selectedEmailTemplate
+                      ? `Email Template: ${selectedEmailTemplate.name}`
+                      : channel === 'whatsapp' ? 'WhatsApp Message'
+                        : channel === 'email' ? 'Email Message'
+                          : 'Mensaje Múltiple'}
                 </span>
               </div>
-              <button
-                onClick={() => setShowTemplates(!showTemplates)}
-                disabled={loadingTemplates}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${channel === 'whatsapp' || selectedTemplate
-                  ? 'text-white/80 hover:bg-white/10'
-                  : 'text-[#8B5A9B] hover:bg-[#8B5A9B]/10'
-                  }`}
-              >
-                {loadingTemplates ? (
-                  <div className="spinner" style={{ width: '16px', height: '16px' }} />
-                ) : (
-                  <>
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
-                    </svg>
-                    Plantillas ({templates.length})
-                  </>
-                )}
-              </button>
+              {/* WhatsApp Templates Button */}
+              {channel === 'whatsapp' && (
+                <button
+                  onClick={() => setShowTemplates(!showTemplates)}
+                  disabled={loadingTemplates}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all text-white/80 hover:bg-white/10"
+                >
+                  {loadingTemplates ? (
+                    <div className="spinner" style={{ width: '16px', height: '16px' }} />
+                  ) : (
+                    <>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+                      </svg>
+                      Plantillas WhatsApp ({templates.length})
+                    </>
+                  )}
+                </button>
+              )}
+              {/* Email Templates Button */}
+              {channel === 'email' && (
+                <button
+                  onClick={() => setShowEmailTemplates(!showEmailTemplates)}
+                  disabled={loadingEmailTemplates}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all text-[#8B5A9B] hover:bg-[#8B5A9B]/10"
+                >
+                  {loadingEmailTemplates ? (
+                    <div className="spinner" style={{ width: '16px', height: '16px' }} />
+                  ) : (
+                    <>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+                        <polyline points="22,6 12,13 2,6" />
+                      </svg>
+                      Plantillas Email ({emailTemplates.length})
+                    </>
+                  )}
+                </button>
+              )}
             </div>
 
             {/* Templates Dropdown */}
@@ -549,6 +745,60 @@ export default function Home() {
                 </div>
               </div>
             )}
+
+            {/* Email Templates Dropdown */}
+            {showEmailTemplates && emailTemplates.length > 0 && (
+              <div className="p-4 border-b border-blue-100 animate-fade-in bg-gradient-to-r from-blue-50 to-cyan-50">
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-xs text-gray-600 font-semibold uppercase tracking-wider">
+                    📧 Plantillas de Email
+                  </p>
+                  <button onClick={() => setShowEmailTemplates(false)} className="text-gray-400 hover:text-gray-600">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <line x1="18" y1="6" x2="6" y2="18" />
+                      <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
+                  </button>
+                </div>
+                <div className="space-y-2 max-h-64 overflow-y-auto">
+                  {emailTemplates.map((template) => (
+                    <div key={template.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                      <button
+                        onClick={() => applyEmailTemplate(template)}
+                        className="w-full text-left p-3 hover:bg-blue-50 transition-all"
+                      >
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="font-semibold text-gray-900">{template.name}</span>
+                          <span className="badge badge-info text-xs">📧 Email</span>
+                        </div>
+                        {template.subject && (
+                          <p className="text-xs text-blue-600 mb-1">📌 {template.subject}</p>
+                        )}
+                        <p className="text-sm text-gray-600 line-clamp-2">
+                          {getEmailTemplatePreview(template)}
+                        </p>
+                      </button>
+                      <div className="px-3 pb-3">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setPreviewEmailTemplate(template);
+                          }}
+                          className="w-full px-3 py-1.5 rounded-lg text-xs font-medium text-blue-600 hover:bg-blue-100 transition-all flex items-center justify-center gap-2"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                            <circle cx="12" cy="12" r="3" />
+                          </svg>
+                          Vista Previa
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
 
             {/* Image Preview Grid - only for non-template messages */}
             {!selectedTemplate && imageFiles.length > 0 && (
@@ -608,6 +858,55 @@ export default function Home() {
                       <p className="text-xs text-gray-400 mt-3 pt-2 border-t border-gray-200">{selectedTemplate.footer.text}</p>
                     )}
                   </div>
+                </div>
+              ) : selectedEmailTemplate ? (
+                <div className="h-full flex flex-col">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs text-gray-400">Edita el contenido de tu email:</p>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          document.execCommand('bold', false);
+                          contentEditableRef.current?.focus();
+                        }}
+                        className="w-7 h-7 rounded flex items-center justify-center text-gray-600 hover:bg-gray-200 transition-all"
+                        title="Negrita (Ctrl+B)"
+                      >
+                        <strong className="text-sm">N</strong>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          document.execCommand('italic', false);
+                          contentEditableRef.current?.focus();
+                        }}
+                        className="w-7 h-7 rounded flex items-center justify-center text-gray-600 hover:bg-gray-200 transition-all"
+                        title="Cursiva (Ctrl+I)"
+                      >
+                        <em className="text-sm">K</em>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          document.execCommand('underline', false);
+                          contentEditableRef.current?.focus();
+                        }}
+                        className="w-7 h-7 rounded flex items-center justify-center text-gray-600 hover:bg-gray-200 transition-all"
+                        title="Subrayado (Ctrl+U)"
+                      >
+                        <u className="text-sm">S</u>
+                      </button>
+                    </div>
+                  </div>
+                  <div
+                    ref={contentEditableRef}
+                    contentEditable
+                    suppressContentEditableWarning
+                    onInput={(e) => setContent(e.currentTarget.innerHTML)}
+                    className="flex-1 p-4 rounded-xl bg-gray-50 border border-gray-200 focus:border-blue-400 focus:outline-none overflow-y-auto"
+                    style={{ lineHeight: '1.6', fontSize: '15px' }}
+                  />
                 </div>
               ) : (
                 <textarea
@@ -674,6 +973,31 @@ export default function Home() {
                     </>
                   )}
                 </div>
+                {selectedEmailTemplate && (
+                  <button
+                    onClick={() => setPreviewEmailTemplate(selectedEmailTemplate)}
+                    className="px-4 py-2 rounded-xl bg-blue-50 border border-blue-200 text-blue-600 hover:bg-blue-100 transition-all flex items-center gap-2 text-sm font-medium"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                      <circle cx="12" cy="12" r="3" />
+                    </svg>
+                    Vista Previa
+                  </button>
+                )}
+                {/* Vista previa para email libre (sin plantilla) */}
+                {!selectedTemplate && !selectedEmailTemplate && (channel === 'email' || channel === 'both') && content.trim() && (
+                  <button
+                    onClick={() => setShowEmailPreview(true)}
+                    className="px-4 py-2 rounded-xl bg-purple-50 border border-purple-200 text-[#8B5A9B] hover:bg-purple-100 transition-all flex items-center gap-2 text-sm font-medium"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                      <circle cx="12" cy="12" r="3" />
+                    </svg>
+                    Vista Previa Email
+                  </button>
+                )}
                 <button
                   onClick={handleSend}
                   disabled={!canSend || sending}
@@ -722,6 +1046,166 @@ export default function Home() {
           />
         </div>
       </div>
+
+      {/* Email Template Preview Modal */}
+      {previewEmailTemplate && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: 'rgba(0, 0, 0, 0.5)', backdropFilter: 'blur(4px)' }}
+          onClick={() => setPreviewEmailTemplate(null)}
+        >
+          <div
+            className="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto animate-fade-in"
+            style={{ boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="p-6 border-b border-gray-100 bg-gradient-to-r from-blue-50 to-cyan-50">
+              <div className="flex items-start justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-600 flex items-center justify-center text-white text-2xl">
+                    📧
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-bold text-gray-900">Vista Previa del Email</h2>
+                    <p className="text-sm text-gray-500">{previewEmailTemplate.name}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setPreviewEmailTemplate(null)}
+                  className="w-10 h-10 rounded-lg bg-white flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-all"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 space-y-6">
+              {/* Template Info */}
+              {previewEmailTemplate.subject && (
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-700 mb-2">Asunto</h3>
+                  <div className="p-3 rounded-lg bg-blue-50 border border-blue-100">
+                    <p className="text-blue-900 font-medium">{previewEmailTemplate.subject}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Email Preview */}
+              <div>
+                <h3 className="text-sm font-semibold text-gray-700 mb-3">Vista Previa del Email</h3>
+                <div className="rounded-xl overflow-hidden border-2 border-gray-200 shadow-lg bg-white">
+                  <iframe
+                    srcDoc={
+                      selectedEmailTemplate && previewEmailTemplate.id === selectedEmailTemplate.id
+                        ? generateFullEmailHtml(content, subject)
+                        : previewEmailTemplate.content
+                    }
+                    className="w-full h-[600px] border-0"
+                    title="Vista previa del email"
+                    sandbox="allow-same-origin"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-6 border-t border-gray-100 flex justify-between">
+              <button
+                onClick={() => setPreviewEmailTemplate(null)}
+                className="btn btn-secondary"
+              >
+                Cerrar
+              </button>
+              <button
+                onClick={() => {
+                  applyEmailTemplate(previewEmailTemplate);
+                  setPreviewEmailTemplate(null);
+                }}
+                className="btn btn-glow"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M5 13l4 4L19 7" />
+                </svg>
+                Usar Esta Plantilla
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Email Preview Modal (for free-form emails without template) */}
+      {showEmailPreview && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: 'rgba(0, 0, 0, 0.5)', backdropFilter: 'blur(4px)' }}
+          onClick={() => setShowEmailPreview(false)}
+        >
+          <div
+            className="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto animate-fade-in"
+            style={{ boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="p-6 border-b border-gray-100 bg-gradient-to-r from-purple-50 to-pink-50">
+              <div className="flex items-start justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-[#8B5A9B] to-purple-600 flex items-center justify-center text-white text-2xl">
+                    📧
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-bold text-gray-900">Vista Previa del Email</h2>
+                    <p className="text-sm text-gray-500">Así se verá tu mensaje</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowEmailPreview(false)}
+                  className="w-10 h-10 rounded-lg bg-white flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-all"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 space-y-6">
+              {/* Subject */}
+              {subject && (
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-700 mb-2">Asunto</h3>
+                  <div className="p-3 rounded-lg bg-purple-50 border border-purple-100">
+                    <p className="text-purple-900 font-medium">{subject}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Email Preview */}
+              <div>
+                <h3 className="text-sm font-semibold text-gray-700 mb-3">Vista Previa del Email</h3>
+                <div className="rounded-xl overflow-hidden border-2 border-gray-200 shadow-lg bg-white">
+                  <iframe
+                    srcDoc={generateFullEmailHtml(content, subject || 'Mensaje de OWO')}
+                    className="w-full h-[600px] border-0"
+                    title="Vista previa del email"
+                    sandbox="allow-same-origin"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-6 border-t border-gray-100 flex justify-end">
+              <button
+                onClick={() => setShowEmailPreview(false)}
+                className="btn btn-secondary"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

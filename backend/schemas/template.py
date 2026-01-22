@@ -9,7 +9,7 @@ class TemplateBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
     subject: Optional[str] = Field(None, max_length=500)
     content: str = Field(..., min_length=1)
-    channel: str = Field(default="both", pattern="^(whatsapp|email|both)$")
+    channel: str = Field(default="email", pattern="^(whatsapp|email|both)$")
 
 
 class TemplateCreate(TemplateBase):

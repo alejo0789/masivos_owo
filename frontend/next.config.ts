@@ -1,11 +1,13 @@
 import type { NextConfig } from "next";
 
-const nextConfig: NextConfig = {
-  // Configure basePath for reverse proxy
-  basePath: process.env.NEXT_PUBLIC_BASE_PATH || '/masivos_owo',
+const isProd = process.env.NODE_ENV === 'production';
 
-  // Asset prefix for static files
-  assetPrefix: process.env.NEXT_PUBLIC_BASE_PATH || '/masivos_owo',
+const nextConfig: NextConfig = {
+  // Configure basePath for reverse proxy (only in production)
+  basePath: isProd ? (process.env.NEXT_PUBLIC_BASE_PATH || '/masivos_owo') : '',
+
+  // Asset prefix for static files (only in production)
+  assetPrefix: isProd ? (process.env.NEXT_PUBLIC_BASE_PATH || '/masivos_owo') : '',
 
   // Trailing slash - set to true for Apache compatibility
   trailingSlash: true,
@@ -15,4 +17,3 @@ const nextConfig: NextConfig = {
 };
 
 export default nextConfig;
-

@@ -11,6 +11,13 @@ from services.whatsapp_service import get_whatsapp_service
 router = APIRouter(prefix="/templates", tags=["templates"])
 
 
+# ============================================
+# Email Templates CRUD Endpoints
+# ============================================
+# These endpoints manage custom email templates stored in the database.
+# For WhatsApp templates, see the WhatsApp Business API endpoints below.
+
+
 @router.get("", response_model=List[TemplateResponse])
 async def get_templates(
     search: Optional[str] = Query(None, description="Search by name"),
