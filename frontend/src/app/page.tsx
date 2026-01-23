@@ -355,6 +355,7 @@ export default function Home() {
           setSelectedTemplate(null);
           uploadedFiles.forEach(f => f.preview && URL.revokeObjectURL(f.preview));
           setUploadedFiles([]);
+          if (fileInputRef.current) fileInputRef.current.value = '';
         }
       } else {
         // Regular message via SMS or n8n webhook
@@ -425,6 +426,7 @@ export default function Home() {
             setSelectedTemplate(null);
             uploadedFiles.forEach(f => f.preview && URL.revokeObjectURL(f.preview));
             setUploadedFiles([]);
+            if (fileInputRef.current) fileInputRef.current.value = '';
           }
         }
       }
