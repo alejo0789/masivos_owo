@@ -18,6 +18,8 @@ export default function TemplateModal({ template, onClose, onSaved }: TemplateMo
     const [error, setError] = useState('');
     const [showPreviewModal, setShowPreviewModal] = useState(false);
     const [showAIAssistant, setShowAIAssistant] = useState(false);
+    const [showColorPicker, setShowColorPicker] = useState(false);
+    const [showFontPicker, setShowFontPicker] = useState(false);
     const editorRef = useRef<HTMLDivElement>(null);
 
     const isEditing = !!template;
@@ -309,87 +311,116 @@ export default function TemplateModal({ template, onClose, onSaved }: TemplateMo
                                     <div className="w-px h-6 bg-gray-300 mx-1"></div>
 
                                     {/* Color Picker */}
-                                    <div className="relative group">
+                                    <div className="relative">
                                         <button
                                             type="button"
-                                            className="px-3 py-1.5 rounded-lg bg-white border border-gray-300 hover:bg-purple-100 hover:border-purple-400 transition-all shadow-sm flex items-center gap-1.5 text-sm"
+                                            onClick={() => {
+                                                setShowColorPicker(!showColorPicker);
+                                                setShowFontPicker(false);
+                                            }}
+                                            className={`px-3 py-1.5 rounded-lg border transition-all shadow-sm flex items-center gap-1.5 text-sm ${showColorPicker ? 'bg-purple-100 border-purple-400' : 'bg-white border-gray-300 hover:bg-purple-50'}`}
                                             title="Color de texto"
                                         >
                                             <span className="w-4 h-4 rounded bg-gradient-to-br from-red-500 via-purple-500 to-blue-500"></span>
                                             <span className="text-gray-700">Color</span>
                                         </button>
-                                        <div className="absolute top-full mt-2 left-0 bg-white rounded-xl border border-gray-200 p-4 hidden group-hover:block min-w-[240px]" style={{ boxShadow: '0 10px 40px rgba(0,0,0,0.15)', zIndex: 50 }}>
-                                            <p className="text-xs font-semibold text-gray-700 mb-3">Colores predefinidos:</p>
-                                            <div className="grid grid-cols-5 gap-2 mb-4">
-                                                {[
-                                                    { color: '#8B5A9B', name: 'Morado OWO' },
-                                                    { color: '#00B4D8', name: 'Azul OWO' },
-                                                    { color: '#000000', name: 'Negro' },
-                                                    { color: '#EF4444', name: 'Rojo' },
-                                                    { color: '#10B981', name: 'Verde' },
-                                                    { color: '#F59E0B', name: 'Naranja' },
-                                                    { color: '#3B82F6', name: 'Azul' },
-                                                    { color: '#EC4899', name: 'Rosa' },
-                                                    { color: '#6B7280', name: 'Gris' },
-                                                    { color: '#FFFFFF', name: 'Blanco' },
-                                                ].map((c) => (
-                                                    <button
-                                                        key={c.color}
-                                                        type="button"
-                                                        onClick={() => applyFormat('foreColor', c.color)}
-                                                        className="w-9 h-9 rounded-lg border-2 border-gray-300 hover:border-purple-500 hover:scale-110 transition-all"
-                                                        style={{
-                                                            backgroundColor: c.color,
-                                                            boxShadow: c.color === '#FFFFFF' ? 'inset 0 0 0 1px #e5e7eb' : 'none'
-                                                        }}
-                                                        title={c.name}
-                                                    />
-                                                ))}
-                                            </div>
-                                            <div className="border-t border-gray-200 pt-3">
-                                                <p className="text-xs font-semibold text-gray-700 mb-2">Selector de color personalizado:</p>
-                                                <div className="flex items-center gap-2">
-                                                    <input
-                                                        type="color"
-                                                        onChange={(e) => applyFormat('foreColor', e.target.value)}
-                                                        className="w-12 h-10 rounded-lg border-2 border-gray-300 cursor-pointer"
-                                                        title="Elige cualquier color"
-                                                    />
-                                                    <span className="text-xs text-gray-500">Haz clic para elegir cualquier color</span>
+
+                                        {showColorPicker && (
+                                            <>
+                                                <div className="fixed inset-0 z-40" onClick={() => setShowColorPicker(false)}></div>
+                                                <div className="absolute top-full mt-2 left-0 bg-white rounded-xl border border-gray-200 p-4 min-w-[240px] z-50 animate-fade-in" style={{ boxShadow: '0 10px 40px rgba(0,0,0,0.15)' }}>
+                                                    <p className="text-xs font-semibold text-gray-700 mb-3">Colores predefinidos:</p>
+                                                    <div className="grid grid-cols-5 gap-2 mb-4">
+                                                        {[
+                                                            { color: '#8B5A9B', name: 'Morado OWO' },
+                                                            { color: '#00B4D8', name: 'Azul OWO' },
+                                                            { color: '#000000', name: 'Negro' },
+                                                            { color: '#EF4444', name: 'Rojo' },
+                                                            { color: '#10B981', name: 'Verde' },
+                                                            { color: '#F59E0B', name: 'Naranja' },
+                                                            { color: '#3B82F6', name: 'Azul' },
+                                                            { color: '#EC4899', name: 'Rosa' },
+                                                            { color: '#6B7280', name: 'Gris' },
+                                                            { color: '#FFFFFF', name: 'Blanco' },
+                                                        ].map((c) => (
+                                                            <button
+                                                                key={c.color}
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    applyFormat('foreColor', c.color);
+                                                                    setShowColorPicker(false);
+                                                                }}
+                                                                className="w-9 h-9 rounded-lg border-2 border-gray-300 hover:border-purple-500 hover:scale-110 transition-all"
+                                                                style={{
+                                                                    backgroundColor: c.color,
+                                                                    boxShadow: c.color === '#FFFFFF' ? 'inset 0 0 0 1px #e5e7eb' : 'none'
+                                                                }}
+                                                                title={c.name}
+                                                            />
+                                                        ))}
+                                                    </div>
+                                                    <div className="border-t border-gray-200 pt-3">
+                                                        <p className="text-xs font-semibold text-gray-700 mb-2">Selector de color personalizado:</p>
+                                                        <div className="flex items-center gap-2">
+                                                            <input
+                                                                type="color"
+                                                                onChange={(e) => {
+                                                                    applyFormat('foreColor', e.target.value);
+                                                                    // Don't close immediately for custom picker to allow adjustment
+                                                                }}
+                                                                className="w-12 h-10 rounded-lg border-2 border-gray-300 cursor-pointer"
+                                                                title="Elige cualquier color"
+                                                            />
+                                                            <span className="text-xs text-gray-500">Haz clic para elegir cualquier color</span>
+                                                        </div>
+                                                    </div>
                                                 </div>
-                                            </div>
-                                        </div>
+                                            </>
+                                        )}
                                     </div>
 
                                     {/* Font Size Picker */}
-                                    <div className="relative group">
+                                    <div className="relative">
                                         <button
                                             type="button"
-                                            className="px-3 py-1.5 rounded-lg bg-white border border-gray-300 hover:bg-purple-100 hover:border-purple-400 transition-all shadow-sm flex items-center gap-1.5 text-sm"
+                                            onClick={() => {
+                                                setShowFontPicker(!showFontPicker);
+                                                setShowColorPicker(false);
+                                            }}
+                                            className={`px-3 py-1.5 rounded-lg border transition-all shadow-sm flex items-center gap-1.5 text-sm ${showFontPicker ? 'bg-purple-100 border-purple-400' : 'bg-white border-gray-300 hover:bg-purple-50'}`}
                                             title="Tamaño de fuente"
                                         >
                                             <span className="text-gray-700">Tamaño</span>
                                         </button>
-                                        <div className="absolute top-full mt-2 left-0 bg-white rounded-xl border border-gray-200 p-2 hidden group-hover:block min-w-[140px]" style={{ boxShadow: '0 10px 40px rgba(0,0,0,0.15)', zIndex: 50 }}>
-                                            {[
-                                                { size: '1', label: 'Muy pequeño' },
-                                                { size: '2', label: 'Pequeño' },
-                                                { size: '3', label: 'Normal' },
-                                                { size: '4', label: 'Mediano' },
-                                                { size: '5', label: 'Grande' },
-                                                { size: '6', label: 'Muy grande' },
-                                                { size: '7', label: 'Enorme' },
-                                            ].map((s) => (
-                                                <button
-                                                    key={s.size}
-                                                    type="button"
-                                                    onClick={() => applyFormat('fontSize', s.size)}
-                                                    className="w-full text-left px-3 py-2 rounded-lg hover:bg-purple-50 transition-all text-sm text-gray-700 hover:text-purple-900"
-                                                >
-                                                    {s.label}
-                                                </button>
-                                            ))}
-                                        </div>
+
+                                        {showFontPicker && (
+                                            <>
+                                                <div className="fixed inset-0 z-40" onClick={() => setShowFontPicker(false)}></div>
+                                                <div className="absolute top-full mt-2 left-0 bg-white rounded-xl border border-gray-200 p-2 min-w-[140px] z-50 animate-fade-in" style={{ boxShadow: '0 10px 40px rgba(0,0,0,0.15)' }}>
+                                                    {[
+                                                        { size: '1', label: 'Muy pequeño' },
+                                                        { size: '2', label: 'Pequeño' },
+                                                        { size: '3', label: 'Normal' },
+                                                        { size: '4', label: 'Mediano' },
+                                                        { size: '5', label: 'Grande' },
+                                                        { size: '6', label: 'Muy grande' },
+                                                        { size: '7', label: 'Enorme' },
+                                                    ].map((s) => (
+                                                        <button
+                                                            key={s.size}
+                                                            type="button"
+                                                            onClick={() => {
+                                                                applyFormat('fontSize', s.size);
+                                                                setShowFontPicker(false);
+                                                            }}
+                                                            className="w-full text-left px-3 py-2 rounded-lg hover:bg-purple-50 transition-all text-sm text-gray-700 hover:text-purple-900"
+                                                        >
+                                                            {s.label}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </>
+                                        )}
                                     </div>
 
                                     <div className="w-px h-6 bg-gray-300 mx-1"></div>

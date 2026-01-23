@@ -137,10 +137,30 @@ async def fetch_owo_contacts(token: str, retry_with_new_token: bool = True) -> L
                     settings.owo_api_contacts_url,
                     headers={
                         "Authorization": f"Bearer {token}"
-                    }
+                    },
+                    follow_redirects=False  # Detect 302s instead of following them
                 )
+                
+                # Treat redirects (302, 307) as auth failures (redirect to login)
+                if response.status_code in [302, 307, 301]:
+                    print(f"[OWO API] Received redirect {response.status_code}, assuming expired token...")
+                    raise httpx.HTTPStatusError(
+                        f"Redirect {response.status_code} interpreted as Auth Error", 
+                        request=response.request, 
+                        response=response
+                    )
+
                 response.raise_for_status()
-                data = response.json()
+                
+                try:
+                    data = response.json()
+                except ValueError:
+                    print("[OWO API] Response is not valid JSON, assuming auth error/login page...")
+                    raise httpx.HTTPStatusError(
+                        "Invalid JSON response interpreted as Auth Error", 
+                        request=response.request, 
+                        response=response
+                    )
                 
                 # Extract contacts from payload
                 if isinstance(data, dict) and "payload" in data:
@@ -154,15 +174,19 @@ async def fetch_owo_contacts(token: str, retry_with_new_token: bool = True) -> L
                     return []
                     
         except httpx.HTTPStatusError as e:
-            # Handle 401 Unauthorized - token expired
-            if e.response.status_code == 401 and retry_with_new_token:
-                print(f"[OWO API] Token expired (401), refreshing and retrying...")
+            # Handle 401, 302 Redirects, or Invalid JSON (Login Page)
+            is_auth_error = (
+                e.response.status_code in [401, 403, 302, 307, 301] or 
+                "Invalid JSON" in str(e) or
+                "Redirect" in str(e)
+            )
+
+            if is_auth_error and retry_with_new_token:
+                print(f"[OWO API] Auth issue detected ({e.response.status_code}), refreshing and retrying...")
                 clear_token_cache()
                 try:
                     new_token = await get_owo_token(force_refresh=True)
-                    # Update the token for this function call too
                     token = new_token
-                    # Retry with new token (but don't allow another refresh to prevent infinite loop)
                     return await fetch_owo_contacts(new_token, retry_with_new_token=False)
                 except HTTPException:
                     raise HTTPException(
