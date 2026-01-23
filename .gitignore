@@ -131,3 +131,6 @@ $RECYCLE.BIN/
 # Temporary files
 *.tmp
 *.temp
+
+# Sensitive tokens
+token permante whatsapp.txt

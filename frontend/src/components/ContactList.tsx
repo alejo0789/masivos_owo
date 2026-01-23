@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { Contact, getContacts, getDepartments } from '@/lib/api';
 
 interface ContactListProps {
@@ -29,6 +30,17 @@ export default function ContactList({ selectedContacts, onSelectionChange, chann
     const [manualContactName, setManualContactName] = useState('');
     const [inputError, setInputError] = useState('');
     const [showManualInput, setShowManualInput] = useState(false);
+
+    // Bulk contact input modal
+    const [showBulkModal, setShowBulkModal] = useState(false);
+    const [bulkInput, setBulkInput] = useState('');
+    const [bulkError, setBulkError] = useState('');
+    const [bulkPreview, setBulkPreview] = useState<{ valid: string[], invalid: string[] }>({ valid: [], invalid: [] });
+    const [isMounted, setIsMounted] = useState(false);
+
+    useEffect(() => {
+        setIsMounted(true);
+    }, []);
 
     useEffect(() => {
         loadData();
@@ -168,6 +180,87 @@ export default function ContactList({ selectedContacts, onSelectionChange, chann
         setShowManualInput(false); // Close the form after adding
     };
 
+    // Parse bulk input and validate contacts
+    const parseBulkInput = (input: string) => {
+        const items = input.split(/[,;\n]+/).map(item => item.trim()).filter(item => item.length > 0);
+        const valid: string[] = [];
+        const invalid: string[] = [];
+        const existingPhones = new Set(selectedContacts.filter(c => c.phone).map(c => c.phone));
+        const existingEmails = new Set(selectedContacts.filter(c => c.email).map(c => c.email?.toLowerCase()));
+
+        items.forEach(item => {
+            // Normalize phone number
+            let normalized = item.replace(/[\s\-\(\)]/g, '');
+
+            // Check if email
+            const isEmail = item.includes('@') && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(item);
+
+            // Check if phone (with or without country code)
+            let isPhone = false;
+            if (!isEmail) {
+                // Add +57 if it's just digits without country code
+                if (/^\d{10}$/.test(normalized)) {
+                    normalized = '+57' + normalized;
+                }
+                isPhone = /^\+?\d{10,15}$/.test(normalized);
+            }
+
+            if (isEmail) {
+                if (existingEmails.has(item.toLowerCase())) {
+                    invalid.push(`${item} (duplicado)`);
+                } else if (!valid.includes(item.toLowerCase())) {
+                    valid.push(item.toLowerCase());
+                }
+            } else if (isPhone) {
+                if (existingPhones.has(normalized)) {
+                    invalid.push(`${normalized} (duplicado)`);
+                } else if (!valid.includes(normalized)) {
+                    valid.push(normalized);
+                }
+            } else {
+                invalid.push(`${item} (formato inválido)`);
+            }
+        });
+
+        return { valid, invalid };
+    };
+
+    // Handle bulk input change and update preview
+    const handleBulkInputChange = (value: string) => {
+        setBulkInput(value);
+        setBulkError('');
+        if (value.trim()) {
+            const preview = parseBulkInput(value);
+            setBulkPreview(preview);
+        } else {
+            setBulkPreview({ valid: [], invalid: [] });
+        }
+    };
+
+    // Add all valid bulk contacts
+    const handleAddBulkContacts = () => {
+        if (bulkPreview.valid.length === 0) {
+            setBulkError('No hay contactos válidos para agregar');
+            return;
+        }
+
+        const newContacts: Contact[] = bulkPreview.valid.map((item, index) => {
+            const isEmail = item.includes('@');
+            return {
+                id: `bulk-${Date.now()}-${index}`,
+                name: '!', // Default name as per user request
+                phone: !isEmail ? item : undefined,
+                email: isEmail ? item : undefined,
+            };
+        });
+
+        onSelectionChange([...selectedContacts, ...newContacts]);
+        setBulkInput('');
+        setBulkPreview({ valid: [], invalid: [] });
+        setBulkError('');
+        setShowBulkModal(false);
+    };
+
     const goToPage = (page: number) => {
         if (page >= 1 && page <= totalPages) {
             setCurrentPage(page);
@@ -214,27 +307,6 @@ export default function ContactList({ selectedContacts, onSelectionChange, chann
         );
     }
 
-    if (error) {
-        return (
-            <div className="card h-full flex items-center justify-center">
-                <div className="text-center">
-                    <div className="w-16 h-16 rounded-2xl bg-red-50 flex items-center justify-center mx-auto mb-4">
-                        <span className="text-3xl">😕</span>
-                    </div>
-                    <p className="text-red-500 mb-4 font-medium">{error}</p>
-                    <button onClick={loadData} className="btn btn-secondary">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <path d="M23 4v6h-6" />
-                            <path d="M1 20v-6h6" />
-                            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
-                        </svg>
-                        Reintentar
-                    </button>
-                </div>
-            </div>
-        );
-    }
-
     return (
         <div className="card h-full flex flex-col overflow-hidden">
             {/* Header */}
@@ -256,9 +328,24 @@ export default function ContactList({ selectedContacts, onSelectionChange, chann
                             <p className="text-gray-400 text-xs">{filteredContacts.length} de {totalContacts} disponibles</p>
                         </div>
                     </div>
-                    <div className="badge badge-purple">
-                        <span className="font-bold">{selectedContacts.length}</span>
-                        <span>seleccionados</span>
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={() => setShowBulkModal(true)}
+                            className="px-3 py-1.5 rounded-full bg-gradient-to-r from-[#00B4D8] to-[#0077B6] text-white text-xs font-semibold hover:shadow-lg hover:scale-105 transition-all flex items-center gap-1"
+                            title="Agregar múltiples contactos"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                                <circle cx="9" cy="7" r="4" />
+                                <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                                <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                            </svg>
+                            Masivos
+                        </button>
+                        <div className="badge badge-purple">
+                            <span className="font-bold">{selectedContacts.length}</span>
+                            <span>seleccionados</span>
+                        </div>
                     </div>
                 </div>
 
@@ -298,6 +385,30 @@ export default function ContactList({ selectedContacts, onSelectionChange, chann
                             <option key={dep} value={dep}>{dep === 'Apostador' ? '🎰 Apostador' : dep === 'Operacional' ? '⚙️ Operacional' : dep}</option>
                         ))}
                     </select>
+                )}
+
+                {/* Error Banner - Non-blocking */}
+                {error && (
+                    <div className="mt-3 p-3 rounded-xl bg-red-50 border border-red-200">
+                        <div className="flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-2">
+                                <span className="text-red-500">⚠️</span>
+                                <p className="text-sm text-red-700">{error}</p>
+                            </div>
+                            <button
+                                onClick={loadData}
+                                className="px-3 py-1 rounded-lg bg-red-100 hover:bg-red-200 text-red-700 text-xs font-medium transition-colors flex items-center gap-1"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <path d="M23 4v6h-6" />
+                                    <path d="M1 20v-6h6" />
+                                    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+                                </svg>
+                                Reintentar
+                            </button>
+                        </div>
+                        <p className="text-xs text-red-500 mt-1">Puedes agregar contactos manualmente o masivamente mientras se resuelve.</p>
+                    </div>
                 )}
 
                 {/* Manual Contact Input */}
@@ -459,15 +570,30 @@ export default function ContactList({ selectedContacts, onSelectionChange, chann
                     <div className="mt-2 pt-2 border-t border-gray-100">
                         <button
                             onClick={handleSelectAll}
-                            className={`text-xs font-medium transition-colors ${allFilteredSelected
-                                ? 'text-red-500 hover:text-red-600'
-                                : 'text-purple-600 hover:text-purple-700'
+                            className={`w-full py-2.5 px-4 rounded-xl text-sm font-semibold transition-all cursor-pointer flex items-center justify-center gap-2 ${allFilteredSelected
+                                ? 'bg-red-50 border-2 border-red-200 text-red-600 hover:bg-red-100 hover:border-red-300'
+                                : 'bg-gradient-to-r from-purple-50 to-blue-50 border-2 border-purple-200 text-purple-700 hover:border-purple-300 hover:shadow-md'
                                 }`}
                         >
-                            {allFilteredSelected
-                                ? `✕ Deseleccionar todos los ${filteredContacts.length} contactos`
-                                : `✓ Seleccionar todos los ${filteredContacts.length} contactos filtrados`
-                            }
+                            {allFilteredSelected ? (
+                                <>
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                        <path d="M18 6 6 18" />
+                                        <path d="m6 6 12 12" />
+                                    </svg>
+                                    Deseleccionar todos los {filteredContacts.length} contactos
+                                </>
+                            ) : (
+                                <>
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                                        <circle cx="9" cy="7" r="4" />
+                                        <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                                        <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                                    </svg>
+                                    Seleccionar TODOS los {filteredContacts.length} contactos
+                                </>
+                            )}
                         </button>
                     </div>
                 )}
@@ -517,6 +643,51 @@ export default function ContactList({ selectedContacts, onSelectionChange, chann
                                         title="Eliminar"
                                     >
                                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                            <line x1="18" y1="6" x2="6" y2="18" />
+                                            <line x1="6" y1="6" x2="18" y2="18" />
+                                        </svg>
+                                    </button>
+                                </div>
+                            ))}
+                    </div>
+                </div>
+            )}
+
+            {/* Bulk Contacts Section */}
+            {selectedContacts.some(c => c.id.startsWith('bulk-')) && (
+                <div className="px-5 py-3 border-b border-blue-100 bg-blue-50/30">
+                    <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-semibold text-blue-700 uppercase tracking-wider">
+                            📋 Agregados masivamente ({selectedContacts.filter(c => c.id.startsWith('bulk-')).length})
+                        </span>
+                        <button
+                            onClick={() => {
+                                onSelectionChange(selectedContacts.filter(c => !c.id.startsWith('bulk-')));
+                            }}
+                            className="text-xs text-red-500 hover:text-red-600 font-medium transition-colors"
+                        >
+                            Eliminar todos
+                        </button>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto">
+                        {selectedContacts
+                            .filter(c => c.id.startsWith('bulk-'))
+                            .map(contact => (
+                                <div
+                                    key={contact.id}
+                                    className="flex items-center gap-2 px-2.5 py-1.5 rounded-full bg-white border border-blue-200 hover:border-blue-300 transition-all group"
+                                >
+                                    <span className="text-xs text-gray-700 font-medium">
+                                        {contact.phone || contact.email}
+                                    </span>
+                                    <button
+                                        onClick={() => {
+                                            onSelectionChange(selectedContacts.filter(c => c.id !== contact.id));
+                                        }}
+                                        className="w-4 h-4 rounded-full bg-red-50 hover:bg-red-100 flex items-center justify-center text-red-400 hover:text-red-600 transition-all opacity-0 group-hover:opacity-100"
+                                        title="Eliminar"
+                                    >
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
                                             <line x1="18" y1="6" x2="6" y2="18" />
                                             <line x1="6" y1="6" x2="18" y2="18" />
                                         </svg>
@@ -641,6 +812,216 @@ export default function ContactList({ selectedContacts, onSelectionChange, chann
                         </button>
                     </div>
                 </div>
+            )}
+
+            {/* Bulk Input Modal - Using Portal to render at document.body level */}
+            {isMounted && showBulkModal && createPortal(
+                <div
+                    className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[9999]"
+                    style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: '1rem',
+                        position: 'fixed',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0
+                    }}
+                    onClick={(e) => {
+                        if (e.target === e.currentTarget) {
+                            setShowBulkModal(false);
+                            setBulkInput('');
+                            setBulkPreview({ valid: [], invalid: [] });
+                            setBulkError('');
+                        }
+                    }}
+                >
+                    <div
+                        className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        {/* Modal Header */}
+                        <div className="p-5 border-b border-purple-100 bg-gradient-to-r from-purple-50 to-blue-50">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#00B4D8] to-[#0077B6] flex items-center justify-center">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
+                                            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                                            <circle cx="9" cy="7" r="4" />
+                                            <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                                            <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                                        </svg>
+                                    </div>
+                                    <div>
+                                        <h3 className="font-bold text-gray-900 text-lg">Ingresos Masivos</h3>
+                                        <p className="text-gray-500 text-xs">
+                                            {channel === 'email' ? 'Ingresa correos separados por coma' : 'Ingresa números separados por coma'}
+                                        </p>
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={() => {
+                                        setShowBulkModal(false);
+                                        setBulkInput('');
+                                        setBulkPreview({ valid: [], invalid: [] });
+                                        setBulkError('');
+                                    }}
+                                    className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-500 hover:text-gray-700 transition-colors"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                        <line x1="18" y1="6" x2="6" y2="18" />
+                                        <line x1="6" y1="6" x2="18" y2="18" />
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Modal Body */}
+                        <div className="p-5 overflow-y-auto" style={{ maxHeight: 'calc(90vh - 200px)' }}>
+                            {/* Instructions */}
+                            <div className="mb-4 p-3 rounded-xl bg-blue-50 border border-blue-200">
+                                <div className="flex items-start gap-2">
+                                    <span className="text-blue-500 mt-0.5">💡</span>
+                                    <div className="text-xs text-blue-700">
+                                        <p className="font-semibold mb-1">Instrucciones:</p>
+                                        <ul className="space-y-0.5 list-disc list-inside">
+                                            {channel === 'email' ? (
+                                                <>
+                                                    <li>Ingresa los correos electrónicos separados por coma</li>
+                                                    <li>Ejemplo: correo1@mail.com, correo2@mail.com</li>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <li>Ingresa los números de teléfono separados por coma</li>
+                                                    <li>Ejemplo: 3001234567, 3112345678</li>
+                                                    <li>Se agregará automáticamente el prefijo +57 si no lo incluyes</li>
+                                                </>
+                                            )}
+                                            <li>También puedes usar saltos de línea o punto y coma como separadores</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Text Area */}
+                            <textarea
+                                className="w-full h-40 p-4 rounded-xl border-2 border-gray-200 focus:border-[#00B4D8] focus:ring-2 focus:ring-[#00B4D8]/20 transition-all resize-none text-sm"
+                                placeholder={channel === 'email'
+                                    ? "correo1@mail.com, correo2@mail.com, correo3@mail.com..."
+                                    : "3001234567, 3112345678, 3209876543..."
+                                }
+                                value={bulkInput}
+                                onChange={(e) => handleBulkInputChange(e.target.value)}
+                                autoFocus
+                            />
+
+                            {/* Preview */}
+                            {(bulkPreview.valid.length > 0 || bulkPreview.invalid.length > 0) && (
+                                <div className="mt-4 space-y-3">
+                                    {/* Valid contacts */}
+                                    {bulkPreview.valid.length > 0 && (
+                                        <div className="p-3 rounded-xl bg-green-50 border border-green-200">
+                                            <div className="flex items-center gap-2 mb-2">
+                                                <span className="text-green-500">✓</span>
+                                                <span className="text-sm font-semibold text-green-700">
+                                                    {bulkPreview.valid.length} contacto{bulkPreview.valid.length > 1 ? 's' : ''} válido{bulkPreview.valid.length > 1 ? 's' : ''}
+                                                </span>
+                                            </div>
+                                            <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
+                                                {bulkPreview.valid.slice(0, 20).map((item, idx) => (
+                                                    <span
+                                                        key={idx}
+                                                        className="px-2 py-0.5 rounded-full bg-green-100 text-green-700 text-xs font-medium"
+                                                    >
+                                                        {item}
+                                                    </span>
+                                                ))}
+                                                {bulkPreview.valid.length > 20 && (
+                                                    <span className="px-2 py-0.5 rounded-full bg-green-200 text-green-700 text-xs font-semibold">
+                                                        +{bulkPreview.valid.length - 20} más
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Invalid contacts */}
+                                    {bulkPreview.invalid.length > 0 && (
+                                        <div className="p-3 rounded-xl bg-red-50 border border-red-200">
+                                            <div className="flex items-center gap-2 mb-2">
+                                                <span className="text-red-500">✕</span>
+                                                <span className="text-sm font-semibold text-red-700">
+                                                    {bulkPreview.invalid.length} elemento{bulkPreview.invalid.length > 1 ? 's' : ''} inválido{bulkPreview.invalid.length > 1 ? 's' : ''}
+                                                </span>
+                                            </div>
+                                            <div className="flex flex-wrap gap-1.5 max-h-20 overflow-y-auto">
+                                                {bulkPreview.invalid.slice(0, 10).map((item, idx) => (
+                                                    <span
+                                                        key={idx}
+                                                        className="px-2 py-0.5 rounded-full bg-red-100 text-red-700 text-xs font-medium"
+                                                    >
+                                                        {item}
+                                                    </span>
+                                                ))}
+                                                {bulkPreview.invalid.length > 10 && (
+                                                    <span className="px-2 py-0.5 rounded-full bg-red-200 text-red-700 text-xs font-semibold">
+                                                        +{bulkPreview.invalid.length - 10} más
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Error message */}
+                            {bulkError && (
+                                <div className="mt-3 p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm">
+                                    {bulkError}
+                                </div>
+                            )}
+
+                            {/* Info about default name */}
+                            <div className="mt-4 p-3 rounded-xl bg-amber-50 border border-amber-200">
+                                <div className="flex items-start gap-2">
+                                    <span className="text-amber-500">⚠️</span>
+                                    <p className="text-xs text-amber-700">
+                                        <strong>Nota:</strong> Los contactos agregados masivamente tendrán <strong>!</strong> como nombre por defecto,
+                                        ya que no se puede asociar un nombre individual a cada uno.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Modal Footer */}
+                        <div className="p-5 border-t border-gray-100 bg-gray-50 flex items-center justify-between">
+                            <button
+                                onClick={() => {
+                                    setShowBulkModal(false);
+                                    setBulkInput('');
+                                    setBulkPreview({ valid: [], invalid: [] });
+                                    setBulkError('');
+                                }}
+                                className="px-4 py-2 rounded-xl text-gray-600 hover:bg-gray-200 font-medium transition-colors"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={handleAddBulkContacts}
+                                disabled={bulkPreview.valid.length === 0}
+                                className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-[#00B4D8] to-[#0077B6] text-white font-semibold hover:shadow-lg hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:shadow-none flex items-center gap-2"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <polyline points="20 6 9 17 4 12" />
+                                </svg>
+                                Agregar {bulkPreview.valid.length > 0 ? `(${bulkPreview.valid.length})` : ''}
+                            </button>
+                        </div>
+                    </div>
+                </div>,
+                document.body
             )}
         </div>
     );
