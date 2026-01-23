@@ -156,10 +156,12 @@ async def fetch_owo_contacts(token: str, retry_with_new_token: bool = True) -> L
         except httpx.HTTPStatusError as e:
             # Handle 401 Unauthorized - token expired
             if e.response.status_code == 401 and retry_with_new_token:
-                print(f"[OWO API] Token expired or invalid, refreshing...")
+                print(f"[OWO API] Token expired (401), refreshing and retrying...")
                 clear_token_cache()
                 try:
                     new_token = await get_owo_token(force_refresh=True)
+                    # Update the token for this function call too
+                    token = new_token
                     # Retry with new token (but don't allow another refresh to prevent infinite loop)
                     return await fetch_owo_contacts(new_token, retry_with_new_token=False)
                 except HTTPException:
@@ -176,17 +178,23 @@ async def fetch_owo_contacts(token: str, retry_with_new_token: bool = True) -> L
                 )
                 
         except httpx.HTTPError as e:
-            print(f"[OWO API] Connection error on attempt {attempt + 1}: {str(e)}")
+            print(f"[OWO API] Request failed on attempt {attempt + 1}: {str(e)}")
+            
+            # If this is the first failure and we haven't retried with a new token yet,
+            # assume it might be a token/connection issue and try to refresh
+            if attempt == 0 and retry_with_new_token:
+                print("[OWO API] First request failed, trying with fresh token as precaution...")
+                clear_token_cache()
+                try:
+                    new_token = await get_owo_token(force_refresh=True)
+                    token = new_token
+                    # We continue the loop with the new token instead of recursing immediately
+                    # to respect the retry count of the loop
+                    continue 
+                except Exception as ex:
+                    print(f"[OWO API] Failed to refresh token during retry: {str(ex)}")
+
             if attempt == MAX_RETRIES - 1:
-                # On connection errors, try to refresh the token and retry once more
-                if retry_with_new_token:
-                    print("[OWO API] Connection failed, trying with fresh token...")
-                    clear_token_cache()
-                    try:
-                        new_token = await get_owo_token(force_refresh=True)
-                        return await fetch_owo_contacts(new_token, retry_with_new_token=False)
-                    except:
-                        pass
                 raise HTTPException(
                     status_code=500,
                     detail=f"Failed to fetch contacts from OWO API after {MAX_RETRIES} attempts: {str(e)}"
