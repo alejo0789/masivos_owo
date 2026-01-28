@@ -14,6 +14,13 @@ export default function AuthProvider({
 
     useEffect(() => {
         const checkAuth = () => {
+            // Skip auth check if running on localhost
+            if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+                setIsAuthenticated(true);
+                setIsLoading(false);
+                return;
+            }
+
             try {
                 const identityStr = localStorage.getItem("identity");
 
