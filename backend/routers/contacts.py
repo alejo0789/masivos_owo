@@ -131,6 +131,7 @@ async def fetch_owo_contacts(token: str, retry_with_new_token: bool = True) -> L
         )
     
     for attempt in range(MAX_RETRIES):
+        print(f"[DEBUG] Fetching contacts from API... attempt {attempt + 1}")
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.get(
@@ -154,6 +155,13 @@ async def fetch_owo_contacts(token: str, retry_with_new_token: bool = True) -> L
                 
                 try:
                     data = response.json()
+                    # Debug: Log the raw response structure
+                    print(f"[DEBUG] Raw API response keys: {data.keys() if isinstance(data, dict) else 'list'}")
+                    if isinstance(data, dict) and "payload" in data:
+                        payload = data["payload"]
+                        if isinstance(payload, dict) and "data" in payload:
+                            first_contact = payload["data"][0] if payload["data"] else None
+                            print(f"[DEBUG] First contact from API (raw): {first_contact}")
                 except ValueError:
                     print("[OWO API] Response is not valid JSON, assuming auth error/login page...")
                     raise httpx.HTTPStatusError(
@@ -166,12 +174,23 @@ async def fetch_owo_contacts(token: str, retry_with_new_token: bool = True) -> L
                 if isinstance(data, dict) and "payload" in data:
                     payload = data["payload"]
                     if isinstance(payload, dict) and "data" in payload:
-                        return payload["data"]
-                    return payload if isinstance(payload, list) else []
+                        contacts_data = payload["data"]
+                    else:
+                        contacts_data = payload if isinstance(payload, list) else []
                 elif isinstance(data, list):
-                    return data
+                    contacts_data = data
                 else:
-                    return []
+                    contacts_data = []
+                
+                # Debug: Log first contact to see structure
+                if contacts_data and len(contacts_data) > 0:
+                    print(f"[DEBUG] API Response - First contact structure: {contacts_data[0]}")
+                    print(f"[DEBUG] API Response - Total contacts received: {len(contacts_data)}")
+                    # Check if any contact has isCustomer=True
+                    customers = [c for c in contacts_data if c.get("isCustomer") == True]
+                    print(f"[DEBUG] API Response - Contacts with isCustomer=True: {len(customers)}")
+                
+                return contacts_data
                     
         except httpx.HTTPStatusError as e:
             # Handle 401, 302 Redirects, or Invalid JSON (Login Page)
@@ -247,7 +266,19 @@ def transform_owo_contact(raw_contact: dict, index: int) -> Contact:
     Returns:
         Contact object.
     """
-    is_customer = raw_contact.get("isCustomer", False)
+    # Get isCustomer value - handle both boolean and string values
+    raw_is_customer = raw_contact.get("isCustomer", False)
+    
+    # Convert to boolean if it's a string
+    if isinstance(raw_is_customer, str):
+        is_customer = raw_is_customer.lower() in ("true", "1", "yes", "si", "sí")
+    elif isinstance(raw_is_customer, (int, float)):
+        is_customer = bool(raw_is_customer)
+    else:
+        is_customer = bool(raw_is_customer)
+    
+    # Debug log para verificar la clasificación
+    print(f"[DEBUG] Contact: {raw_contact.get('name', 'N/A')}, isCustomer raw: {raw_is_customer} (type: {type(raw_is_customer).__name__}), parsed: {is_customer}")
     
     # Determine department based on isCustomer
     # True = Apostador, False = Operacional
@@ -298,6 +329,9 @@ async def get_contacts(
     
     Supports searching by name, email, or phone, and filtering by department.
     """
+    print("\n" + "="*60)
+    print("[GET_CONTACTS] ENDPOINT CALLED - NEW CODE RUNNING")
+    print("="*60 + "\n")
     contacts: List[Contact] = []
     
     try:
@@ -308,10 +342,12 @@ async def get_contacts(
         raw_contacts = await fetch_owo_contacts(token)
         
         # Step 3: Transform OWO contacts to our schema
+        # Include contacts with state="Y" OR contacts without state field (customers)
+        # Exclude only contacts with explicit state="N"
         contacts = [
             transform_owo_contact(raw, idx) 
             for idx, raw in enumerate(raw_contacts)
-            if raw.get("state") == "Y"  # Only active contacts
+            if raw.get("state") != "N"  # Exclude inactive, include active and those without state
         ]
         
     except HTTPException as e:
