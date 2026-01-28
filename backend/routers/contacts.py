@@ -317,7 +317,7 @@ def transform_owo_contact(raw_contact: dict, index: int) -> Contact:
 async def get_contacts(
     search: Optional[str] = Query(None, description="Search term for filtering contacts"),
     department: Optional[str] = Query(None, description="Filter by department (Apostador/Operacional)"),
-    limit: int = Query(100, ge=1, le=1000, description="Maximum number of contacts to return"),
+    limit: int = Query(100, ge=1, le=2000, description="Maximum number of contacts to return"),
     offset: int = Query(0, ge=0, description="Number of contacts to skip")
 ):
     """
