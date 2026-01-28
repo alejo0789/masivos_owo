@@ -75,6 +75,17 @@ export default function Sidebar() {
 
             {/* Logo Section */}
             <div className="p-6 relative z-10">
+                <div className="mb-6">
+                    <a
+                        href="https://saman.lafortuna.com.co/#/home"
+                        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors text-white text-sm font-medium border border-white/10 w-full justify-center group"
+                    >
+                        <svg className="w-4 h-4 text-white/70 group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                        </svg>
+                        VOLVER A CÉNTRICA
+                    </a>
+                </div>
                 <div className="flex items-center gap-4">
                     <div className="relative">
                         <div className="w-14 h-14 rounded-2xl overflow-hidden bg-white/20 flex items-center justify-center shadow-lg" style={{
