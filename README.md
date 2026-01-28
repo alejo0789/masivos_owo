@@ -135,7 +135,7 @@ El frontend estará disponible en `http://localhost:3000`
 
 ## 🚀 Deployment en Servidor
 
-Para desplegar la aplicación en un servidor CentOS con Apache, consulta la **[Guía de Deployment](DEPLOYMENT.md)** completa.
+Para desplegar la aplicación en un servidor CentOS con Apache, consulta la **[Guía de Deployment](docs/DEPLOYMENT.md)** completa.
 
 ### Deployment Rápido
 
@@ -161,7 +161,7 @@ sudo ./deploy.sh logs
 sudo ./deploy.sh status
 ```
 
-Para más detalles sobre configuración de Apache, servicios systemd, y troubleshooting, revisa [DEPLOYMENT.md](DEPLOYMENT.md).
+Para más detalles sobre configuración de Apache, servicios systemd, y troubleshooting, revisa [DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 ## 📖 Uso
 

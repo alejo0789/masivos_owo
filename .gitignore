@@ -134,3 +134,6 @@ $RECYCLE.BIN/
 
 # Sensitive tokens
 token permante whatsapp.txt
+
+# Exclude saman_dev
+saman_dev/
