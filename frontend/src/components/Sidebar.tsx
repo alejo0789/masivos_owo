@@ -172,7 +172,7 @@ export default function Sidebar() {
                         <span className="text-sm font-medium">¿Necesitas ayuda?</span>
                     </div>
                     <p className="text-white/50 text-xs mt-2 leading-relaxed">
-                        Configura tus webhooks en las variables de entorno para conectar n8n.
+                        Contacta el equipo de soporte IA/TI de Acertemos.
                     </p>
                 </div>
             </div>
