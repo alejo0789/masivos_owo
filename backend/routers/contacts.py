@@ -284,14 +284,24 @@ def transform_owo_contact(raw_contact: dict, index: int) -> Contact:
     # True = Apostador, False = Operacional
     department = "Apostador" if is_customer else "Operacional"
     
-    # Build the full name
+    # Build the display name with priority:
+    # 1. customerName (for customers/apostadores)
+    # 2. fullName
+    # 3. name + lastName
+    # 4. "Sin nombre" as fallback
+    customer_name = raw_contact.get("customerName", "") or ""
     name = raw_contact.get("name", "") or ""
     last_name = raw_contact.get("lastName", "") or ""
     full_name = raw_contact.get("fullName", "") or ""
     
-    # Use fullName if available, otherwise combine name and lastName
-    display_name = full_name.strip() if full_name.strip() else f"{name} {last_name}".strip()
-    if not display_name:
+    # Priority: customerName > fullName > name+lastName
+    if customer_name.strip():
+        display_name = customer_name.strip()
+    elif full_name.strip():
+        display_name = full_name.strip()
+    elif name.strip() or last_name.strip():
+        display_name = f"{name} {last_name}".strip()
+    else:
         display_name = "Sin nombre"
     
     # Format phone number
