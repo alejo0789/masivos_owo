@@ -199,7 +199,7 @@ export default function TemplateModal({ template, onClose, onSaved }: TemplateMo
 
                         {/* Name */}
                         <div>
-                            <label className="label">Nombre de la plantilla</label>
+                            <label className="label">Nombre de la plantilla <span className="text-red-500">*</span></label>
                             <input
                                 type="text"
                                 className="input"
@@ -486,6 +486,13 @@ export default function TemplateModal({ template, onClose, onSaved }: TemplateMo
                                 Asistente IA
                                 <span className="text-xs px-2 py-0.5 bg-white/20 rounded-full">Beta</span>
                             </button>
+                            {/* Error message near buttons for visibility */}
+                            {error && (
+                                <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-50 border border-red-200">
+                                    <span className="text-red-500">⚠️</span>
+                                    <p className="text-red-600 text-sm font-medium">{error}</p>
+                                </div>
+                            )}
                             <div className="flex gap-3">
                                 <button
                                     type="button"
