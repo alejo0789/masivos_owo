@@ -56,7 +56,7 @@ export default function ContactList({ selectedContacts, onSelectionChange, chann
             setLoading(true);
             setError('');
             const [contactsData, depsData] = await Promise.all([
-                getContacts({ limit: 2000 }), // Fetch all contacts
+                getContacts({ limit: 5000 }), // Fetch all contacts
                 getDepartments(),
             ]);
             setContacts(contactsData.contacts);
