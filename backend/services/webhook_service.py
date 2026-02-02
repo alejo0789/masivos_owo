@@ -14,7 +14,7 @@ class WebhookService:
     def __init__(self):
         self.whatsapp_url = settings.webhook_whatsapp
         self.email_url = settings.webhook_email
-        self.timeout = 120.0  # 2 minutes timeout for bulk operations
+        self.timeout = 600.0  # 10 minutes timeout for bulk operations
     
     async def send_bulk_whatsapp(
         self,
