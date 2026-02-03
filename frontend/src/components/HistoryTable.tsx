@@ -10,7 +10,11 @@ interface HistoryTableProps {
 export default function HistoryTable({ logs, loading }: HistoryTableProps) {
     const formatDate = (dateStr: string) => {
         const date = new Date(dateStr);
-        return date.toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' });
+        return date.toLocaleString('es-CO', {
+            timeZone: 'America/Bogota',
+            dateStyle: 'short',
+            timeStyle: 'short'
+        });
     };
 
     const getStatusBadge = (status: string) => {

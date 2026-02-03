@@ -2,6 +2,13 @@
 from datetime import datetime
 from sqlalchemy import Column, Integer, String, Text, DateTime, JSON
 from database import Base
+import pytz
+
+
+def get_colombia_time():
+    """Get current time in Colombia timezone (America/Bogota)."""
+    colombia_tz = pytz.timezone('America/Bogota')
+    return datetime.now(colombia_tz)
 
 
 class MessageLog(Base):
@@ -18,7 +25,7 @@ class MessageLog(Base):
     channel = Column(String(50), nullable=False)  # whatsapp, email, both
     status = Column(String(50), default="pending")  # pending, sent, failed
     error_message = Column(Text, nullable=True)
-    sent_at = Column(DateTime, default=datetime.utcnow)
+    sent_at = Column(DateTime, default=get_colombia_time)
     attachments = Column(JSON, default=list)  # List of attachment filenames
     
     def __repr__(self):
