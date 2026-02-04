@@ -50,6 +50,18 @@ export default function Home() {
   useEffect(() => {
     loadTemplates();
     loadEmailTemplates();
+
+    // Check for contacts from groups page
+    const groupContacts = sessionStorage.getItem('selectedGroupContacts');
+    if (groupContacts) {
+      try {
+        const contacts = JSON.parse(groupContacts);
+        setSelectedContacts(contacts);
+        sessionStorage.removeItem('selectedGroupContacts');
+      } catch (e) {
+        console.error('Error parsing group contacts:', e);
+      }
+    }
   }, []);
 
   useEffect(() => {

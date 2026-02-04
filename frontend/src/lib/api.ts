@@ -455,3 +455,117 @@ export async function getSMSCredits(): Promise<{ success: boolean; credits: numb
     return handleResponse<{ success: boolean; credits: number }>(response);
 }
 
+// Groups API
+export interface GroupContact {
+    id: number;
+    group_id: number;
+    name: string;
+    phone?: string;
+    email?: string;
+    created_at: string;
+}
+
+export interface Group {
+    id: number;
+    name: string;
+    description?: string;
+    created_at: string;
+    updated_at: string;
+    contact_count: number;
+}
+
+export interface GroupDetail {
+    id: number;
+    name: string;
+    description?: string;
+    created_at: string;
+    updated_at: string;
+    contacts: GroupContact[];
+}
+
+export interface ExcelUploadResponse {
+    group_id: number;
+    group_name: string;
+    contacts_created: number;
+    errors: string[];
+}
+
+export async function getGroups(): Promise<Group[]> {
+    const response = await fetch(`${API_URL}/groups`);
+    return handleResponse<Group[]>(response);
+}
+
+export async function getGroup(id: number): Promise<GroupDetail> {
+    const response = await fetch(`${API_URL}/groups/${id}`);
+    return handleResponse<GroupDetail>(response);
+}
+
+export async function createGroup(data: { name: string; description?: string }): Promise<Group> {
+    const response = await fetch(`${API_URL}/groups`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+    });
+    return handleResponse<Group>(response);
+}
+
+export async function uploadGroupExcel(file: File, groupName: string): Promise<ExcelUploadResponse> {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('group_name', groupName);
+
+    const response = await fetch(`${API_URL}/groups/upload`, {
+        method: 'POST',
+        body: formData,
+    });
+    return handleResponse<ExcelUploadResponse>(response);
+}
+
+export async function updateGroup(id: number, data: { name?: string; description?: string }): Promise<Group> {
+    const response = await fetch(`${API_URL}/groups/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+    });
+    return handleResponse<Group>(response);
+}
+
+export async function deleteGroup(id: number): Promise<void> {
+    const response = await fetch(`${API_URL}/groups/${id}`, {
+        method: 'DELETE',
+    });
+    if (!response.ok) {
+        const error = await response.json().catch(() => ({ detail: 'Error al eliminar' }));
+        throw new Error(error.detail);
+    }
+}
+
+export async function addGroupContact(groupId: number, data: { name: string; phone?: string; email?: string }): Promise<GroupContact> {
+    const response = await fetch(`${API_URL}/groups/${groupId}/contacts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+    });
+    return handleResponse<GroupContact>(response);
+}
+
+export async function updateGroupContact(groupId: number, contactId: number, data: { name?: string; phone?: string; email?: string }): Promise<GroupContact> {
+    const response = await fetch(`${API_URL}/groups/${groupId}/contacts/${contactId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+    });
+    return handleResponse<GroupContact>(response);
+}
+
+export async function deleteGroupContact(groupId: number, contactId: number): Promise<void> {
+    const response = await fetch(`${API_URL}/groups/${groupId}/contacts/${contactId}`, {
+        method: 'DELETE',
+    });
+    if (!response.ok) {
+        const error = await response.json().catch(() => ({ detail: 'Error al eliminar' }));
+        throw new Error(error.detail);
+    }
+}
+
+

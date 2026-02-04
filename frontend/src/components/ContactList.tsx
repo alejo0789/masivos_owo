@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { Contact, getContacts, getDepartments } from '@/lib/api';
+import { Contact, getContacts, getDepartments, Group, getGroups, getGroup } from '@/lib/api';
 
 interface ContactListProps {
     selectedContacts: Contact[];
@@ -38,6 +38,14 @@ export default function ContactList({ selectedContacts, onSelectionChange, chann
     const [bulkPreview, setBulkPreview] = useState<{ valid: string[], invalid: string[] }>({ valid: [], invalid: [] });
     const [isMounted, setIsMounted] = useState(false);
 
+    // Group selector
+    const [groups, setGroups] = useState<Group[]>([]);
+    const [selectedGroupIds, setSelectedGroupIds] = useState<number[]>([]);
+    const [loadingGroups, setLoadingGroups] = useState(false);
+    const [showGroupDropdown, setShowGroupDropdown] = useState(false);
+    const [usingGroups, setUsingGroups] = useState(false);
+    const [groupSearch, setGroupSearch] = useState('');
+
     useEffect(() => {
         setIsMounted(true);
     }, []);
@@ -55,15 +63,94 @@ export default function ContactList({ selectedContacts, onSelectionChange, chann
         try {
             setLoading(true);
             setError('');
+
+            // Load groups first (independent, silently fails)
+            try {
+                const groupsData = await getGroups();
+                setGroups(groupsData);
+            } catch {
+                console.log('Could not load groups');
+            }
+
+            // Load OWO contacts
+            try {
+                const [contactsData, depsData] = await Promise.all([
+                    getContacts({ limit: 5000 }),
+                    getDepartments(),
+                ]);
+                setContacts(contactsData.contacts);
+                setTotalContacts(contactsData.total);
+                setDepartments(depsData);
+            } catch (err) {
+                setError('Error al cargar contactos de OWO');
+                console.error(err);
+            }
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // Handle group selection
+    const handleGroupSelect = async (groupId: number) => {
+        if (selectedGroupIds.includes(groupId)) {
+            // Deselect group
+            setSelectedGroupIds(selectedGroupIds.filter(id => id !== groupId));
+        } else {
+            // Select group
+            setSelectedGroupIds([...selectedGroupIds, groupId]);
+        }
+    };
+
+    // Load group contacts when groups are selected
+    const loadGroupContacts = async () => {
+        if (selectedGroupIds.length === 0) return;
+
+        setLoadingGroups(true);
+        try {
+            const groupContacts: Contact[] = [];
+            for (const groupId of selectedGroupIds) {
+                const groupDetail = await getGroup(groupId);
+                groupDetail.contacts.forEach(c => {
+                    groupContacts.push({
+                        id: `group-${groupId}-${c.id}`,
+                        name: c.name,
+                        phone: c.phone,
+                        email: c.email,
+                        department: `Grupo: ${groupDetail.name}`,
+                    });
+                });
+            }
+            // Set group contacts to display in list AND select all
+            setContacts(groupContacts);
+            setTotalContacts(groupContacts.length);
+            onSelectionChange(groupContacts);
+            setUsingGroups(true);
+            setShowGroupDropdown(false);
+        } catch (err) {
+            console.error('Error loading group contacts:', err);
+        } finally {
+            setLoadingGroups(false);
+        }
+    };
+
+    // Clear group selection and reload OWO contacts
+    const clearGroupSelection = async () => {
+        setSelectedGroupIds([]);
+        setUsingGroups(false);
+        onSelectionChange([]);
+        // Reload OWO contacts
+        try {
+            setLoading(true);
             const [contactsData, depsData] = await Promise.all([
-                getContacts({ limit: 5000 }), // Fetch all contacts
+                getContacts({ limit: 5000 }),
                 getDepartments(),
             ]);
             setContacts(contactsData.contacts);
             setTotalContacts(contactsData.total);
             setDepartments(depsData);
+            setError('');
         } catch (err) {
-            setError('Error al cargar contactos');
+            setError('Error al cargar contactos de OWO');
             console.error(err);
         } finally {
             setLoading(false);
@@ -348,6 +435,106 @@ export default function ContactList({ selectedContacts, onSelectionChange, chann
                         </div>
                     </div>
                 </div>
+
+                {/* Group Selector */}
+                {groups.length > 0 && (
+                    <div className="mb-4 relative">
+                        {usingGroups ? (
+                            <div className="flex items-center justify-between p-3 rounded-xl bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200">
+                                <div className="flex items-center gap-2">
+                                    <span className="text-lg">👥</span>
+                                    <span className="text-sm font-semibold text-green-700">
+                                        Usando contactos de grupos ({selectedContacts.length} contactos)
+                                    </span>
+                                </div>
+                                <button
+                                    onClick={clearGroupSelection}
+                                    className="px-3 py-1 rounded-lg bg-white border border-green-200 text-green-600 text-xs font-medium hover:bg-green-50 transition-colors"
+                                >
+                                    ✕ Volver a OWO
+                                </button>
+                            </div>
+                        ) : (
+                            <>
+                                <button
+                                    onClick={() => setShowGroupDropdown(!showGroupDropdown)}
+                                    className="w-full p-3 rounded-xl bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 hover:border-blue-300 transition-all flex items-center justify-between"
+                                >
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-lg">👥</span>
+                                        <span className="text-sm font-semibold text-blue-700">
+                                            {selectedGroupIds.length > 0
+                                                ? `${selectedGroupIds.length} grupo${selectedGroupIds.length > 1 ? 's' : ''} seleccionado${selectedGroupIds.length > 1 ? 's' : ''}`
+                                                : 'Seleccionar grupos'}
+                                        </span>
+                                    </div>
+                                    <svg
+                                        xmlns="http://www.w3.org/2000/svg"
+                                        width="16"
+                                        height="16"
+                                        viewBox="0 0 24 24"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        strokeWidth="2"
+                                        className={`text-blue-500 transition-transform ${showGroupDropdown ? 'rotate-180' : ''}`}
+                                    >
+                                        <polyline points="6 9 12 15 18 9" />
+                                    </svg>
+                                </button>
+
+                                {showGroupDropdown && (
+                                    <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg max-h-80 overflow-hidden animate-fade-in">
+                                        <div className="p-2 border-b border-gray-100 sticky top-0 bg-white">
+                                            <input
+                                                type="text"
+                                                placeholder="🔍 Buscar grupo..."
+                                                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-blue-400"
+                                                value={groupSearch}
+                                                onChange={(e) => setGroupSearch(e.target.value)}
+                                                autoFocus
+                                            />
+                                        </div>
+                                        <div className="max-h-48 overflow-auto">
+                                            {groups
+                                                .filter(g => g.name.toLowerCase().includes(groupSearch.toLowerCase()))
+                                                .map(group => (
+                                                    <label
+                                                        key={group.id}
+                                                        className="flex items-center gap-3 p-3 hover:bg-blue-50 cursor-pointer transition-colors"
+                                                    >
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={selectedGroupIds.includes(group.id)}
+                                                            onChange={() => handleGroupSelect(group.id)}
+                                                            className="checkbox"
+                                                        />
+                                                        <div className="flex-1">
+                                                            <p className="font-semibold text-gray-900 text-sm">{group.name}</p>
+                                                            <p className="text-xs text-gray-500">{group.contact_count} contactos</p>
+                                                        </div>
+                                                    </label>
+                                                ))}
+                                            {groups.filter(g => g.name.toLowerCase().includes(groupSearch.toLowerCase())).length === 0 && (
+                                                <p className="p-4 text-center text-gray-500 text-sm">No se encontraron grupos</p>
+                                            )}
+                                        </div>
+                                        {selectedGroupIds.length > 0 && (
+                                            <div className="p-2 border-t border-gray-100 sticky bottom-0 bg-white">
+                                                <button
+                                                    onClick={loadGroupContacts}
+                                                    disabled={loadingGroups}
+                                                    className="w-full py-2 px-4 rounded-lg bg-gradient-to-r from-blue-500 to-indigo-500 text-white font-semibold text-sm hover:shadow-md transition-all disabled:opacity-50"
+                                                >
+                                                    {loadingGroups ? 'Cargando...' : `Cargar ${selectedGroupIds.length} grupo${selectedGroupIds.length > 1 ? 's' : ''}`}
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </>
+                        )}
+                    </div>
+                )}
 
                 {/* Search */}
                 <div className="relative mb-3">

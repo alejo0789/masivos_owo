@@ -836,6 +836,61 @@ body::before {
   opacity: 0.5;
 }
 
+/* ===== ACTION BUTTONS (Text-based) ===== */
+.action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 24px;
+  border-radius: 12px;
+  font-weight: 600;
+  font-size: 14px;
+  white-space: nowrap;
+  border: none;
+  cursor: pointer;
+  color: white;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.action-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+}
+
+.action-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.action-btn-primary {
+  background: linear-gradient(135deg, var(--owo-purple) 0%, var(--owo-violet) 100%);
+  box-shadow: 0 4px 15px var(--owo-purple-glow);
+}
+
+.action-btn-primary:hover:not(:disabled) {
+  box-shadow: 0 6px 25px var(--owo-purple-glow);
+}
+
+.action-btn-whatsapp {
+  background: linear-gradient(135deg, #25D366 0%, #128C7E 100%);
+  box-shadow: 0 4px 15px rgba(37, 211, 102, 0.25);
+}
+
+.action-btn-whatsapp:hover:not(:disabled) {
+  box-shadow: 0 6px 25px rgba(37, 211, 102, 0.35);
+}
+
+.action-btn-success {
+  background: linear-gradient(135deg, #00C853 0%, #00A844 100%);
+  box-shadow: 0 4px 15px rgba(0, 200, 83, 0.25);
+}
+
+.action-btn-danger {
+  background: linear-gradient(135deg, #FF4757 0%, #E8434E 100%);
+  box-shadow: 0 4px 15px rgba(255, 71, 87, 0.25);
+}
+
 /* ===== STAT PILLS ===== */
 .stat-pill {
   display: inline-flex;

@@ -11,7 +11,7 @@ from fastapi.staticfiles import StaticFiles
 
 from config import get_settings
 from database import init_db
-from routers import contacts_router, templates_router, messages_router, history_router, whatsapp_router, assistant_router, sms_router
+from routers import contacts_router, templates_router, messages_router, history_router, whatsapp_router, assistant_router, sms_router, groups_router
 
 # Configure logging
 logging.basicConfig(
@@ -102,6 +102,7 @@ app.include_router(history_router)
 app.include_router(whatsapp_router)
 app.include_router(assistant_router)
 app.include_router(sms_router)
+app.include_router(groups_router)
 
 
 @app.get("/")

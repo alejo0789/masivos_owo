@@ -6,5 +6,7 @@ from routers.history import router as history_router
 from routers.whatsapp import router as whatsapp_router
 from routers.assistant import router as assistant_router
 from routers.sms import router as sms_router
+from routers.groups import router as groups_router
 
-__all__ = ["contacts_router", "templates_router", "messages_router", "history_router", "whatsapp_router", "assistant_router", "sms_router"]
+__all__ = ["contacts_router", "templates_router", "messages_router", "history_router", "whatsapp_router", "assistant_router", "sms_router", "groups_router"]
+
