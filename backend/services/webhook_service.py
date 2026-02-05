@@ -20,22 +20,11 @@ class WebhookService:
         self,
         recipients: List[Dict[str, Any]],
         message: str,
-        attachments: Optional[List[Dict[str, Any]]] = None
+        attachments: Optional[List[Dict[str, Any]]] = None,
+        batch_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Send WhatsApp messages to multiple recipients in a single webhook call.
-        
-        Expected response from n8n:
-        {
-            "success": true,
-            "total": 100,
-            "sent": 98,
-            "failed": 2,
-            "results": [
-                {"phone": "+57300...", "success": true, "error": null},
-                {"phone": "+57301...", "success": false, "error": "Invalid number"}
-            ]
-        }
         """
         if not self.whatsapp_url:
             return {
@@ -47,6 +36,7 @@ class WebhookService:
             }
         
         payload = {
+            "batch_id": batch_id,
             "channel": "whatsapp",
             "recipients": recipients,
             "message": message,
@@ -99,22 +89,11 @@ class WebhookService:
         recipients: List[Dict[str, Any]],
         subject: str,
         message: str,
-        attachments: Optional[List[Dict[str, Any]]] = None
+        attachments: Optional[List[Dict[str, Any]]] = None,
+        batch_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Send email messages to multiple recipients in a single webhook call.
-        
-        Expected response from n8n:
-        {
-            "success": true,
-            "total": 100,
-            "sent": 98,
-            "failed": 2,
-            "results": [
-                {"email": "user@example.com", "success": true, "error": null},
-                {"email": "bad@example.com", "success": false, "error": "Invalid email"}
-            ]
-        }
         """
         if not self.email_url:
             return {
@@ -126,6 +105,7 @@ class WebhookService:
             }
         
         payload = {
+            "batch_id": batch_id,
             "channel": "email",
             "recipients": recipients,
             "subject": subject or "Mensaje sin asunto",

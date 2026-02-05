@@ -1,12 +1,14 @@
 """Messages router for sending messages."""
 import re
+import uuid
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, BackgroundTasks
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Dict, Any
-from database import get_db
+from database import get_db, async_session
 from models.message_log import MessageLog
-from schemas.message import BulkMessageCreate, MessageResponse, BulkSendResponse
+from schemas.message import BulkMessageCreate, MessageResponse, BulkSendResponse, WebhookCallback
 from services.webhook_service import webhook_service
 from services.file_service import file_service
 
@@ -63,22 +65,101 @@ async def delete_file(filename: str):
     raise HTTPException(status_code=404, detail="Archivo no encontrado")
 
 
+async def send_bulk_background(
+    batch_id: str,
+    channel: str,
+    recipients_whatsapp: List[Dict[str, Any]],
+    recipients_email: List[Dict[str, Any]],
+    subject: str,
+    content: str,
+    attachment_data: List[Dict[str, Any]]
+):
+    """Background task to send bulk messages to n8n."""
+    # Send to WhatsApp webhook
+    if recipients_whatsapp:
+        await webhook_service.send_bulk_whatsapp(
+            recipients=recipients_whatsapp,
+            message=content,
+            attachments=attachment_data,
+            batch_id=batch_id
+        )
+    
+    # Send to Email webhook
+    if recipients_email:
+        await webhook_service.send_bulk_email(
+            recipients=recipients_email,
+            subject=subject,
+            message=content,
+            attachments=attachment_data,
+            batch_id=batch_id
+        )
+
+
+@router.post("/callback")
+async def webhook_callback(callback: WebhookCallback):
+    """
+    Callback from n8n to update message status.
+    """
+    print(f"[CALLBACK] Recibido batch_id: {callback.batch_id}")
+    updated_count = 0
+    
+    async with async_session() as db:
+        for result in callback.results:
+            print(f"[CALLBACK] Procesando resultado: {result.email or result.phone} - Success: {result.success}")
+            if result.email:
+                stmt = (
+                    update(MessageLog)
+                    .where(MessageLog.batch_id == callback.batch_id)
+                    .where(MessageLog.recipient_email == result.email)
+                    .values(
+                        status="sent" if result.success else "failed",
+                        error_message=result.error
+                    )
+                )
+                res = await db.execute(stmt)
+                updated_count += res.rowcount
+            elif result.phone:
+                stmt = (
+                    update(MessageLog)
+                    .where(MessageLog.batch_id == callback.batch_id)
+                    .where(MessageLog.recipient_phone == result.phone)
+                    .values(
+                        status="sent" if result.success else "failed",
+                        error_message=result.error
+                    )
+                )
+                res = await db.execute(stmt)
+                updated_count += res.rowcount
+        
+        await db.commit()
+    
+    print(f"[CALLBACK] Actualizados {updated_count} registros en la base de datos")
+    return {"status": "ok", "total_received": len(callback.results), "actual_updates": updated_count}
+
+
 @router.post("/send-bulk", response_model=BulkSendResponse)
-async def send_bulk_messages(bulk_message: BulkMessageCreate, db: AsyncSession = Depends(get_db)):
+async def send_bulk_messages(
+    bulk_message: BulkMessageCreate, 
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db)
+):
     """
     Send the same message to multiple recipients.
-    Sends ONE request to the webhook with ALL recipients.
-    Waits for n8n response with actual sent/failed counts.
+    Creates records as 'pending' and triggers n8n in background.
     """
     if not bulk_message.recipients:
         raise HTTPException(status_code=400, detail="Se requiere al menos un destinatario")
     
+    # Generate unique ID for this batch
+    batch_id = str(uuid.uuid4())
+    
     # Prepare attachments once
     attachment_data = await webhook_service.prepare_attachments(bulk_message.attachments)
     
-    # Separate recipients by channel capability and personalize messages
+    # Separate recipients by channel capability
     whatsapp_recipients = []
     email_recipients = []
+    log_entries: List[MessageLog] = []
     
     for recipient in bulk_message.recipients:
         recipient_data = {
@@ -95,145 +176,18 @@ async def send_bulk_messages(bulk_message: BulkMessageCreate, db: AsyncSession =
                 "name": recipient.name,
                 "phone": recipient.phone,
                 "email": recipient.email,
-                "message": personalized_message  # Include personalized message
+                "message": personalized_message
             })
+        
         if bulk_message.channel in ("email", "both") and recipient.email:
             email_recipients.append({
                 "name": recipient.name,
                 "email": recipient.email,
                 "phone": recipient.phone,
-                "message": personalized_message  # Include personalized message
+                "message": personalized_message
             })
-    
-    # Results from webhooks
-    whatsapp_result = None
-    email_result = None
-    
-    # Send to WhatsApp webhook
-    if whatsapp_recipients:
-        whatsapp_result = await webhook_service.send_bulk_whatsapp(
-            recipients=whatsapp_recipients,
-            message=bulk_message.content,
-            attachments=attachment_data
-        )
-    
-    # Send to Email webhook
-    if email_recipients:
-        email_result = await webhook_service.send_bulk_email(
-            recipients=email_recipients,
-            subject=bulk_message.subject or "Mensaje",
-            message=bulk_message.content,
-            attachments=attachment_data
-        )
-    
-    # Build results map from webhook responses
-    whatsapp_results_map = {}
-    whatsapp_results_list = []
-    if whatsapp_result and whatsapp_result.get("results"):
-        whatsapp_results_list = whatsapp_result["results"]
-        for r in whatsapp_results_list:
-            if r.get("phone"):
-                whatsapp_results_map[r["phone"]] = r
-    
-    email_results_map = {}
-    email_results_list = []
-    if email_result and email_result.get("results"):
-        email_results_list = email_result["results"]
-        for r in email_results_list:
-            if r.get("email"):
-                email_results_map[r["email"]] = r
-    
-    # Create log entries for each recipient
-    log_entries: List[MessageLog] = []
-    total_sent = 0
-    total_failed = 0
-    
-    # Track indices for fallback matching when n8n doesn't return identifiers
-    whatsapp_idx = 0
-    email_idx = 0
-    
-    for recipient in bulk_message.recipients:
-        recipient_status = "sent"
-        recipient_error = None
-        
-        if bulk_message.channel == "whatsapp":
-            if not recipient.phone:
-                recipient_status = "failed"
-                recipient_error = "Sin numero de telefono"
-            elif whatsapp_result:
-                # Try to get result by phone, fallback to index
-                individual = whatsapp_results_map.get(recipient.phone)
-                if individual is None and whatsapp_idx < len(whatsapp_results_list):
-                    individual = whatsapp_results_list[whatsapp_idx]
-                    whatsapp_idx += 1
-                
-                if individual:
-                    if not individual.get("success", True):
-                        recipient_status = "failed"
-                        recipient_error = individual.get("error") or "Error en envio"
-                elif not whatsapp_result.get("success", True):
-                    recipient_status = "failed"
-                    recipient_error = whatsapp_result.get("error", "Error en envio")
-                    
-        elif bulk_message.channel == "email":
-            if not recipient.email:
-                recipient_status = "failed"
-                recipient_error = "Sin email"
-            elif email_result:
-                # Try to get result by email, fallback to index
-                individual = email_results_map.get(recipient.email)
-                if individual is None and email_idx < len(email_results_list):
-                    individual = email_results_list[email_idx]
-                    email_idx += 1
-                
-                if individual:
-                    if not individual.get("success", True):
-                        recipient_status = "failed"
-                        recipient_error = individual.get("error") or "Error en envio"
-                elif not email_result.get("success", True):
-                    recipient_status = "failed"
-                    recipient_error = email_result.get("error", "Error en envio")
-                    
-        else:  # both
-            has_phone = bool(recipient.phone)
-            has_email = bool(recipient.email)
-            errors = []
             
-            if not has_phone and not has_email:
-                recipient_status = "failed"
-                recipient_error = "Sin informacion de contacto"
-            else:
-                if has_phone and whatsapp_result:
-                    individual = whatsapp_results_map.get(recipient.phone)
-                    if individual is None and whatsapp_idx < len(whatsapp_results_list):
-                        individual = whatsapp_results_list[whatsapp_idx]
-                        whatsapp_idx += 1
-                    
-                    if individual and not individual.get("success", True):
-                        errors.append(f"WhatsApp: {individual.get('error') or 'Error'}")
-                    elif not individual and not whatsapp_result.get("success", True):
-                        errors.append(f"WhatsApp: {whatsapp_result.get('error', 'Error')}")
-                
-                if has_email and email_result:
-                    individual = email_results_map.get(recipient.email)
-                    if individual is None and email_idx < len(email_results_list):
-                        individual = email_results_list[email_idx]
-                        email_idx += 1
-                    
-                    if individual and not individual.get("success", True):
-                        errors.append(f"Email: {individual.get('error') or 'Error'}")
-                    elif not individual and not email_result.get("success", True):
-                        errors.append(f"Email: {email_result.get('error', 'Error')}")
-                
-                if errors:
-                    recipient_status = "failed"
-                    recipient_error = "; ".join(errors)
-        
-        if recipient_status == "sent":
-            total_sent += 1
-        else:
-            total_failed += 1
-        
+        # Create log entry
         log_entry = MessageLog(
             recipient_name=recipient.name,
             recipient_phone=recipient.phone,
@@ -241,20 +195,31 @@ async def send_bulk_messages(bulk_message: BulkMessageCreate, db: AsyncSession =
             subject=bulk_message.subject,
             message_content=bulk_message.content,
             channel=bulk_message.channel,
-            status=recipient_status,
-            error_message=recipient_error,
-            attachments=bulk_message.attachments
+            status="pending",
+            attachments=bulk_message.attachments,
+            batch_id=batch_id
         )
         db.add(log_entry)
         log_entries.append(log_entry)
     
     await db.flush()
-    for entry in log_entries:
-        await db.refresh(entry)
+    
+    # Queue the actual sending to n8n
+    background_tasks.add_task(
+        send_bulk_background,
+        batch_id=batch_id,
+        channel=bulk_message.channel,
+        recipients_whatsapp=whatsapp_recipients,
+        recipients_email=email_recipients,
+        subject=bulk_message.subject or "Mensaje",
+        content=bulk_message.content,
+        attachment_data=attachment_data
+    )
     
     return BulkSendResponse(
         total=len(bulk_message.recipients),
-        sent=total_sent,
-        failed=total_failed,
+        sent=0,
+        failed=0,
+        batch_id=batch_id,
         messages=[MessageResponse.model_validate(log) for log in log_entries]
     )

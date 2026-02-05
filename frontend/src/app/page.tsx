@@ -431,7 +431,8 @@ export default function Home() {
           });
 
           setResult(response);
-          if (response.sent > 0 && response.failed === 0) {
+          // If response has batch_id, it means it's processing in background
+          if ((response as any).batch_id || (response.sent > 0 && response.failed === 0)) {
             setSelectedContacts([]);
             setSubject('');
             setContent('');
@@ -561,10 +562,14 @@ export default function Home() {
             </div>
             <div>
               <p className="font-semibold text-gray-900">
-                {result.failed === 0 ? '¡Envío completado con éxito!' : 'Envío parcialmente completado'}
+                {(result as any).batch_id
+                  ? '¡Proceso de envío iniciado!'
+                  : result.failed === 0 ? '¡Envío completado con éxito!' : 'Envío parcialmente completado'}
               </p>
               <p className="text-sm text-gray-500">
-                {result.sent} enviados exitosamente, {result.failed} fallidos
+                {(result as any).batch_id
+                  ? `Se están procesando ${result.total} mensajes en segundo plano. Los resultados aparecerán en el historial pronto.`
+                  : `${result.sent} enviados exitosamente, ${result.failed} fallidos`}
               </p>
             </div>
           </div>

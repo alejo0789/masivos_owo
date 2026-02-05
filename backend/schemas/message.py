@@ -52,4 +52,19 @@ class BulkSendResponse(BaseModel):
     total: int
     sent: int
     failed: int
+    batch_id: Optional[str] = None
     messages: List[MessageResponse]
+
+
+class WebhookResult(BaseModel):
+    """Result for a single recipient from a webhook."""
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    success: bool
+    error: Optional[str] = None
+
+
+class WebhookCallback(BaseModel):
+    """Callback payload from n8n."""
+    batch_id: str
+    results: List[WebhookResult]

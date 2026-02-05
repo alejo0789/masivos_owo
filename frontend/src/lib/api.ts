@@ -44,6 +44,7 @@ export interface MessageLog {
     error_message?: string;
     sent_at: string;
     attachments: string[];
+    batch_id?: string;
 }
 
 export interface BulkSendResponse {
@@ -363,10 +364,14 @@ export async function getStats(days: number = 7): Promise<Stats> {
 export async function getHistoryCount(params?: {
     channel?: string;
     status?: string;
+    date_from?: string;
+    date_to?: string;
 }): Promise<{ count: number }> {
     const searchParams = new URLSearchParams();
     if (params?.channel) searchParams.append('channel', params.channel);
     if (params?.status) searchParams.append('status', params.status);
+    if (params?.date_from) searchParams.append('date_from', params.date_from);
+    if (params?.date_to) searchParams.append('date_to', params.date_to);
 
     const url = `${API_URL}/history/count?${searchParams.toString()}`;
     const response = await fetch(url);

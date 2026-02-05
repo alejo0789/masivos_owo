@@ -27,6 +27,7 @@ class MessageLog(Base):
     error_message = Column(Text, nullable=True)
     sent_at = Column(DateTime, default=get_colombia_time)
     attachments = Column(JSON, default=list)  # List of attachment filenames
+    batch_id = Column(String(50), nullable=True, index=True)
     
     def __repr__(self):
         return f"<MessageLog(id={self.id}, recipient='{self.recipient_name}', status='{self.status}')>"

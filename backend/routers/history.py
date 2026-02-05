@@ -129,18 +129,30 @@ async def get_stats(
 async def get_history_count(
     channel: Optional[str] = Query(None, pattern="^(whatsapp|email|sms|both)$"),
     status: Optional[str] = Query(None, pattern="^(sent|failed|pending)$"),
+    date_from: Optional[datetime] = Query(None, description="Filter from this date"),
+    date_to: Optional[datetime] = Query(None, description="Filter until this date"),
     db: AsyncSession = Depends(get_db)
 ):
     """Get total count of messages in history."""
     query = select(func.count(MessageLog.id))
     
+    conditions = []
     if channel:
-        query = query.where(MessageLog.channel == channel)
+        conditions.append(MessageLog.channel == channel)
     
     if status:
-        query = query.where(MessageLog.status == status)
+        conditions.append(MessageLog.status == status)
+        
+    if date_from:
+        conditions.append(MessageLog.sent_at >= date_from)
+        
+    if date_to:
+        conditions.append(MessageLog.sent_at <= date_to)
+        
+    if conditions:
+        query = query.where(and_(*conditions))
     
     result = await db.execute(query)
-    count = result.scalar()
+    count = result.scalar() or 0
     
     return {"count": count}
