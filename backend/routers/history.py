@@ -1,8 +1,8 @@
 """History router for viewing sent messages."""
 from datetime import datetime, timedelta
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, and_
+from sqlalchemy import select, func, and_, delete
 from typing import List, Optional
 from database import get_db
 from models.message_log import MessageLog
@@ -23,6 +23,16 @@ async def get_history(
     db: AsyncSession = Depends(get_db)
 ):
     """Get message history with filtering options."""
+    # Normalize dates for SQLite comparison (naive Bogota time)
+    if date_from and date_from.tzinfo:
+        date_from = date_from.replace(tzinfo=None)
+    if date_to:
+        if date_to.tzinfo:
+            date_to = date_to.replace(tzinfo=None)
+        # If time is exactly midnight, assume they want the whole end day
+        if date_to.hour == 0 and date_to.minute == 0:
+            date_to = date_to.replace(hour=23, minute=59, second=59)
+
     query = select(MessageLog)
     
     conditions = []
@@ -65,7 +75,8 @@ async def get_stats(
     db: AsyncSession = Depends(get_db)
 ):
     """Get messaging statistics."""
-    cutoff_date = datetime.utcnow() - timedelta(days=days)
+    from models.message_log import get_colombia_time
+    cutoff_date = get_colombia_time() - timedelta(days=days)
     
     # Total messages
     total_result = await db.execute(
@@ -134,6 +145,15 @@ async def get_history_count(
     db: AsyncSession = Depends(get_db)
 ):
     """Get total count of messages in history."""
+    # Normalize dates
+    if date_from and date_from.tzinfo:
+        date_from = date_from.replace(tzinfo=None)
+    if date_to:
+        if date_to.tzinfo:
+            date_to = date_to.replace(tzinfo=None)
+        if date_to.hour == 0 and date_to.minute == 0:
+            date_to = date_to.replace(hour=23, minute=59, second=59)
+
     query = select(func.count(MessageLog.id))
     
     conditions = []
@@ -156,3 +176,61 @@ async def get_history_count(
     count = result.scalar() or 0
     
     return {"count": count}
+
+
+@router.delete("")
+async def delete_history(
+    search: Optional[str] = Query(None, description="Borrar por nombre, email o teléfono"),
+    date_from: Optional[datetime] = Query(None, description="Borrar desde esta fecha"),
+    date_to: Optional[datetime] = Query(None, description="Borrar hasta esta fecha"),
+    channel: Optional[str] = Query(None, pattern="^(whatsapp|email|sms|both)$"),
+    status: Optional[str] = Query(None, pattern="^(sent|failed|pending)$"),
+    db: AsyncSession = Depends(get_db)
+):
+    """Delete message history based on filters."""
+    # Require at least one filter to avoid accidental total wipe
+    if not any([search, date_from, date_to, channel, status]):
+        raise HTTPException(
+            status_code=400, 
+            detail="Debe proporcionar al menos un filtro (búsqueda, fecha, canal o estado) para realizar la limpieza"
+        )
+
+    # Normalize dates
+    if date_from and date_from.tzinfo:
+        date_from = date_from.replace(tzinfo=None)
+    if date_to:
+        if date_to.tzinfo:
+            date_to = date_to.replace(tzinfo=None)
+        if date_to.hour == 0 and date_to.minute == 0:
+            date_to = date_to.replace(hour=23, minute=59, second=59)
+
+    query = delete(MessageLog)
+    
+    conditions = []
+    if search:
+        search_pattern = f"%{search}%"
+        conditions.append(
+            MessageLog.recipient_name.ilike(search_pattern) |
+            MessageLog.recipient_email.ilike(search_pattern) |
+            MessageLog.recipient_phone.ilike(search_pattern)
+        )
+        
+    if date_from:
+        conditions.append(MessageLog.sent_at >= date_from)
+    if date_to:
+        conditions.append(MessageLog.sent_at <= date_to)
+    if channel:
+        conditions.append(MessageLog.channel == channel)
+    if status:
+        conditions.append(MessageLog.status == status)
+        
+    if conditions:
+        query = query.where(and_(*conditions))
+    
+    result = await db.execute(query)
+    await db.commit()
+    
+    return {
+        "message": "Historial limpiado correctamente", 
+        "deleted_count": result.rowcount
+    }

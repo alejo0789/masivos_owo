@@ -6,9 +6,10 @@ import pytz
 
 
 def get_colombia_time():
-    """Get current time in Colombia timezone (America/Bogota)."""
+    """Get current time in Colombia timezone (America/Bogota) as naive datetime."""
     colombia_tz = pytz.timezone('America/Bogota')
-    return datetime.now(colombia_tz)
+    # Return naive datetime representing the time in Bogota
+    return datetime.now(colombia_tz).replace(tzinfo=None)
 
 
 class MessageLog(Base):

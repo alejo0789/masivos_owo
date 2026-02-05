@@ -259,6 +259,23 @@ class WhatsAppService:
             "messages": []
         }
         
+        # Cache template data ONCE before the loop (optimization)
+        cached_template_data = None
+        cached_template_vars = []
+        if variable_mapping:
+            cached_template_data = await self.get_template_by_name(template_name)
+            if cached_template_data:
+                # Extract variables in order from template body
+                body_text = ""
+                for comp in cached_template_data.get("components", []):
+                    if comp.get("type") == "BODY":
+                        body_text = comp.get("text", "")
+                        break
+                cached_template_vars = self._extract_variable_names(body_text)
+                logger.info(f"Template variables cached (order): {cached_template_vars}")
+            else:
+                logger.error(f"Could not fetch template '{template_name}' to determine variable order")
+        
         for recipient in recipients:
             phone = recipient.get("phone")
             logger.info(f"Processing recipient: {recipient}")
@@ -273,57 +290,41 @@ class WhatsAppService:
                 })
                 continue
             
-            # Build components for variables
+            # Build components for variables using cached template data
             components = None
-            if variable_mapping:
-                # Get the template to extract variable order
-                template_data = await self.get_template_by_name(template_name)
-                if template_data:
-                    # Extract variables in order from template body
-                    body_text = ""
-                    for comp in template_data.get("components", []):
-                        if comp.get("type") == "BODY":
-                            body_text = comp.get("text", "")
-                            break
-                    
-                    # Extract variable names in order
-                    template_vars = self._extract_variable_names(body_text)
-                    logger.info(f"Template variables in order: {template_vars}")
-                    
-                    # Only build components if template actually has variables
-                    if template_vars:
-                        # Build parameters in the correct order
-                        body_params = []
-                        for var_name in template_vars:
-                            var_lower = var_name.lower()
-                            # Find the field name for this variable
-                            field_name = variable_mapping.get(var_lower)
-                            if field_name:
-                                value = recipient.get(field_name, "")
-                                if value and str(value).strip():  # Ensure value is not empty or whitespace
-                                    body_params.append({
-                                        "type": "text",
-                                        "parameter_name": var_name,  # Include the parameter name!
-                                        "text": str(value).strip()
-                                    })
-                                    logger.debug(f"Added parameter for {{{{{var_name}}}}}: '{str(value).strip()}'")
-                                else:
-                                    logger.warning(f"Variable {{{{{var_name}}}}} maps to field '{field_name}' but value is empty for {recipient.get('name')}")
+            if variable_mapping and cached_template_data:
+                # Only build components if template actually has variables
+                if cached_template_vars:
+                    # Build parameters in the correct order
+                    body_params = []
+                    for var_name in cached_template_vars:
+                        var_lower = var_name.lower()
+                        # Find the field name for this variable
+                        field_name = variable_mapping.get(var_lower)
+                        if field_name:
+                            value = recipient.get(field_name, "")
+                            if value and str(value).strip():  # Ensure value is not empty or whitespace
+                                body_params.append({
+                                    "type": "text",
+                                    "parameter_name": var_name,  # Include the parameter name!
+                                    "text": str(value).strip()
+                                })
+                                logger.debug(f"Added parameter for {{{{{var_name}}}}}: '{str(value).strip()}'")
                             else:
-                                logger.warning(f"No mapping found for variable {{{{{var_name}}}}}")
-                        
-                        if body_params:
-                            components = [{
-                                "type": "body",
-                                "parameters": body_params
-                            }]
-                            logger.info(f"Final components for {recipient.get('name')}: {components}")
+                                logger.warning(f"Variable {{{{{var_name}}}}} maps to field '{field_name}' but value is empty for {recipient.get('name')}")
                         else:
-                            logger.warning(f"No valid parameters for {recipient.get('name')} - all values were empty")
+                            logger.warning(f"No mapping found for variable {{{{{var_name}}}}}")
+                    
+                    if body_params:
+                        components = [{
+                            "type": "body",
+                            "parameters": body_params
+                        }]
+                        logger.info(f"Final components for {recipient.get('name')}: {components}")
                     else:
-                        logger.info(f"Template has no variables, sending without components")
+                        logger.warning(f"No valid parameters for {recipient.get('name')} - all values were empty")
                 else:
-                    logger.error(f"Could not fetch template '{template_name}' to determine variable order")
+                    logger.info(f"Template has no variables, sending without components")
             
             # Send the message
             result = await self.send_template_message(
