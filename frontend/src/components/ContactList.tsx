@@ -46,6 +46,10 @@ export default function ContactList({ selectedContacts, onSelectionChange, chann
     const [usingGroups, setUsingGroups] = useState(false);
     const [groupSearch, setGroupSearch] = useState('');
 
+    // OWO Contacts
+    const [showOwoDropdown, setShowOwoDropdown] = useState(false);
+    const [owoLoading, setOwoLoading] = useState(false);
+
     useEffect(() => {
         setIsMounted(true);
     }, []);
@@ -60,33 +64,64 @@ export default function ContactList({ selectedContacts, onSelectionChange, chann
     }, [search, departmentFilter]);
 
     const loadData = async () => {
+        setLoading(true);
         try {
-            setLoading(true);
-            setError('');
-
-            // Load groups first (independent, silently fails)
+            // Load groups and departments initially
             try {
-                const groupsData = await getGroups();
-                setGroups(groupsData);
-            } catch {
-                console.log('Could not load groups');
-            }
-
-            // Load OWO contacts
-            try {
-                const [contactsData, depsData] = await Promise.all([
-                    getContacts({ limit: 5000 }),
-                    getDepartments(),
+                const [groupsData, depsData] = await Promise.all([
+                    getGroups(),
+                    getDepartments()
                 ]);
-                setContacts(contactsData.contacts);
-                setTotalContacts(contactsData.total);
+                setGroups(groupsData);
                 setDepartments(depsData);
-            } catch (err) {
-                setError('Error al cargar contactos de OWO');
-                console.error(err);
+            } catch (e) {
+                console.log('Could not load initial data', e);
             }
+        } catch (err) {
+            console.error(err);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleLoadOwoContacts = async (type: 'Apostador' | 'Operacional' | 'Inactivo' | 'Todos') => {
+        setOwoLoading(true);
+        setError('');
+        setShowOwoDropdown(false);
+        setUsingGroups(false); // Disable groups mode if active
+        setSelectedGroupIds([]);
+
+        try {
+            // Load departments if not loaded
+            if (departments.length === 0) {
+                try {
+                    const deps = await getDepartments();
+                    setDepartments(deps);
+                } catch (e) { console.error("Error loading departments", e); }
+            }
+
+            const params: any = { limit: 50000 };
+            if (type !== 'Todos') {
+                params.department = type;
+            }
+
+            const contactsData = await getContacts(params);
+
+            // If filtering by specific type (except Todos), we might want to select all of them?
+            // For now just display them
+            setContacts(contactsData.contacts);
+            setTotalContacts(contactsData.total);
+
+            // If "Todos" is selected, we clear the local department filter to show everything
+            // If a specific type is selected, the backend already filtered it, so contacts only contains that type.
+            // We can set the local filter to empty because the list is already filtered.
+            setDepartmentFilter('');
+
+        } catch (err) {
+            setError('Error al cargar contactos de OWO');
+            console.error(err);
+        } finally {
+            setOwoLoading(false);
         }
     };
 
@@ -106,6 +141,11 @@ export default function ContactList({ selectedContacts, onSelectionChange, chann
         if (selectedGroupIds.length === 0) return;
 
         setLoadingGroups(true);
+        // Clear previous contacts if we're switching modes
+        if (!usingGroups) {
+            setContacts([]);
+        }
+
         try {
             const groupContacts: Contact[] = [];
             for (const groupId of selectedGroupIds) {
@@ -133,28 +173,13 @@ export default function ContactList({ selectedContacts, onSelectionChange, chann
         }
     };
 
-    // Clear group selection and reload OWO contacts
-    const clearGroupSelection = async () => {
+    // Clear group selection
+    const clearGroupSelection = () => {
         setSelectedGroupIds([]);
         setUsingGroups(false);
         onSelectionChange([]);
-        // Reload OWO contacts
-        try {
-            setLoading(true);
-            const [contactsData, depsData] = await Promise.all([
-                getContacts({ limit: 5000 }),
-                getDepartments(),
-            ]);
-            setContacts(contactsData.contacts);
-            setTotalContacts(contactsData.total);
-            setDepartments(depsData);
-            setError('');
-        } catch (err) {
-            setError('Error al cargar contactos de OWO');
-            console.error(err);
-        } finally {
-            setLoading(false);
-        }
+        setContacts([]); // Clear contacts
+        setTotalContacts(0);
     };
 
     const filteredContacts = useMemo(() => {
@@ -435,6 +460,69 @@ export default function ContactList({ selectedContacts, onSelectionChange, chann
                         </div>
                     </div>
                 </div>
+
+                {/* OWO Contacts Button */}
+                {!usingGroups && (
+                    <div className="mb-4 relative">
+                        <button
+                            onClick={() => setShowOwoDropdown(!showOwoDropdown)}
+                            disabled={owoLoading}
+                            className="w-full p-3 rounded-xl bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 hover:border-purple-300 transition-all flex items-center justify-between"
+                        >
+                            <div className="flex items-center gap-2">
+                                <span className="text-lg">🌐</span>
+                                <span className="text-sm font-semibold text-purple-700">
+                                    {owoLoading ? 'Cargando contactos...' : 'Traer contactos de OWO API'}
+                                </span>
+                            </div>
+                            {owoLoading ? (
+                                <div className="spinner-glow w-4 h-4 ml-2" />
+                            ) : (
+                                <svg
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    width="16"
+                                    height="16"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="2"
+                                    className={`text-purple-500 transition-transform ${showOwoDropdown ? 'rotate-180' : ''}`}
+                                >
+                                    <polyline points="6 9 12 15 18 9" />
+                                </svg>
+                            )}
+                        </button>
+
+                        {showOwoDropdown && (
+                            <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden animate-fade-in">
+                                <button
+                                    className="w-full p-3 text-left hover:bg-purple-50 text-sm font-medium border-b border-gray-50 flex items-center gap-2"
+                                    onClick={() => handleLoadOwoContacts('Apostador')}
+                                >
+                                    <span>🎰</span> Traer Apostadores
+                                </button>
+                                <button
+                                    className="w-full p-3 text-left hover:bg-purple-50 text-sm font-medium border-b border-gray-50 flex items-center gap-2"
+                                    onClick={() => handleLoadOwoContacts('Operacional')}
+                                >
+                                    <span>⚙️</span> Traer Operacionales
+                                </button>
+                                <button
+                                    className="w-full p-3 text-left hover:bg-purple-50 text-sm font-medium border-b border-gray-50 flex items-center gap-2"
+                                    onClick={() => handleLoadOwoContacts('Inactivo')}
+                                >
+                                    <span>🚫</span> Traer Inactivos
+                                </button>
+                                <button
+                                    className="w-full p-3 text-left hover:bg-purple-50 text-sm font-medium flex items-center gap-2 text-purple-700 bg-purple-50/50"
+                                    onClick={() => handleLoadOwoContacts('Todos')}
+                                >
+                                    <span>🌍</span> Traer Todos
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                )}
 
                 {/* Group Selector */}
                 {groups.length > 0 && (

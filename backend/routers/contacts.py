@@ -290,9 +290,14 @@ def transform_owo_contact(raw_contact: dict, index: int) -> Contact:
     else:
         is_customer = bool(raw_is_customer)
     
-    # Determine department based on isCustomer
-    # True = Apostador, False = Operacional
-    department = "Apostador" if is_customer else "Operacional"
+    # Determine department based on isCustomer and state
+    # If state is "N", department is "Inactivo"
+    # Otherwise: True = Apostador, False = Operacional
+    state = raw_contact.get("state")
+    if state == "N":
+        department = "Inactivo"
+    else:
+        department = "Apostador" if is_customer else "Operacional"
     
     # Build the display name with priority:
     # 1. customerName (for customers/apostadores)
@@ -337,7 +342,7 @@ def transform_owo_contact(raw_contact: dict, index: int) -> Contact:
 async def get_contacts(
     search: Optional[str] = Query(None, description="Search term for filtering contacts"),
     department: Optional[str] = Query(None, description="Filter by department (Apostador/Operacional)"),
-    limit: int = Query(5000, ge=1, le=10000, description="Maximum number of contacts to return"),
+    limit: int = Query(5000, ge=1, le=100000, description="Maximum number of contacts to return"),
     offset: int = Query(0, ge=0, description="Number of contacts to skip")
 ):
     """
@@ -362,12 +367,10 @@ async def get_contacts(
         raw_contacts = await fetch_owo_contacts(token)
         
         # Step 3: Transform OWO contacts to our schema
-        # Include contacts with state="Y" OR contacts without state field (customers)
-        # Exclude only contacts with explicit state="N"
+        # Include ALL contacts, identifying inactive ones via department
         contacts = [
             transform_owo_contact(raw, idx) 
             for idx, raw in enumerate(raw_contacts)
-            if raw.get("state") != "N"  # Exclude inactive, include active and those without state
         ]
         
     except HTTPException as e:
@@ -412,7 +415,7 @@ async def get_departments():
     - Apostador (isCustomer=true)
     - Operacional (isCustomer=false)
     """
-    return ["Apostador", "Operacional"]
+    return ["Apostador", "Operacional", "Inactivo"]
 
 
 @router.post("/refresh-token")
