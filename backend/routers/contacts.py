@@ -132,13 +132,20 @@ async def fetch_owo_contacts(token: str, retry_with_new_token: bool = True) -> L
     
     for attempt in range(MAX_RETRIES):
         print(f"[DEBUG] Fetching contacts from API... attempt {attempt + 1}")
+        print(f"[DEBUG] URL: {settings.owo_api_contacts_url}")
+        print(f"[DEBUG] Token (first 20 chars): {token[:20]}..." if len(token) > 20 else f"[DEBUG] Token: {token}")
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with httpx.AsyncClient(timeout=120.0, verify=True) as client:
+                headers = {
+                    "Authorization": f"Bearer {token}",
+                    "Accept": "application/json",
+                    "Content-Type": "application/json",
+                    "User-Agent": "MasivosOWO/1.0"
+                }
+                print(f"[DEBUG] Headers: {headers}")
                 response = await client.get(
                     settings.owo_api_contacts_url,
-                    headers={
-                        "Authorization": f"Bearer {token}"
-                    },
+                    headers=headers,
                     follow_redirects=False  # Detect 302s instead of following them
                 )
                 
@@ -214,6 +221,12 @@ async def fetch_owo_contacts(token: str, retry_with_new_token: bool = True) -> L
                     )
             
             print(f"[OWO API] HTTP error on attempt {attempt + 1}: {e.response.status_code}")
+            # Log the response body for debugging
+            try:
+                error_body = e.response.text[:500]  # Limit to first 500 chars
+                print(f"[OWO API] Error response body: {error_body}")
+            except:
+                pass
             if attempt == MAX_RETRIES - 1:
                 raise HTTPException(
                     status_code=500,
