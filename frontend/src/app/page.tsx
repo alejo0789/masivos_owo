@@ -33,6 +33,7 @@ export default function Home() {
   const [showTemplates, setShowTemplates] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<WhatsAppTemplate | null>(null);
   const [loadingTemplates, setLoadingTemplates] = useState(false);
+  const [headerMediaUrl, setHeaderMediaUrl] = useState('');
 
   // Email Templates
   const [emailTemplates, setEmailTemplates] = useState<Template[]>([]);
@@ -130,6 +131,7 @@ export default function Home() {
   const clearTemplate = () => {
     setSelectedTemplate(null);
     setContent('');
+    setHeaderMediaUrl('');
   };
 
   const applyEmailTemplate = (template: Template) => {
@@ -300,10 +302,25 @@ export default function Home() {
     }
   };
 
+  // Check if selected template requires media header
+  const templateRequiresMedia = selectedTemplate?.header &&
+    ['IMAGE', 'VIDEO', 'DOCUMENT'].includes(selectedTemplate.header.type.toUpperCase());
+
   const canSend = selectedContacts.length > 0 && (content.trim().length > 0 || selectedTemplate || selectedEmailTemplate);
 
   const handleSend = async () => {
     if (!canSend) return;
+
+    // Warn if template requires media but URL not provided
+    if (templateRequiresMedia && !headerMediaUrl.trim()) {
+      const confirmed = window.confirm(
+        `Esta plantilla requiere ${selectedTemplate?.header?.type.toUpperCase() === 'IMAGE' ? 'una imagen' :
+          selectedTemplate?.header?.type.toUpperCase() === 'VIDEO' ? 'un video' : 'un documento'
+        } pero no has proporcionado una URL. ¿Deseas continuar sin el archivo multimedia? (El envío podría fallar)`
+      );
+      if (!confirmed) return;
+    }
+
     setError('');
     setResult(null);
     setSending(true);
@@ -357,6 +374,7 @@ export default function Home() {
           language_code: selectedTemplate.language,
           recipients,
           variable_mapping: variableMapping,
+          header_media_url: headerMediaUrl || undefined,
         });
 
         setResult(response);
@@ -365,6 +383,7 @@ export default function Home() {
           setSelectedContacts([]);
           setContent('');
           setSelectedTemplate(null);
+          setHeaderMediaUrl('');
           uploadedFiles.forEach(f => f.preview && URL.revokeObjectURL(f.preview));
           setUploadedFiles([]);
           if (fileInputRef.current) fileInputRef.current.value = '';
@@ -678,6 +697,37 @@ export default function Home() {
                   </p>
                 </div>
               )}
+
+              {/* Header Media URL input - show when template has IMAGE, VIDEO or DOCUMENT header */}
+              {selectedTemplate.header && ['IMAGE', 'VIDEO', 'DOCUMENT'].includes(selectedTemplate.header.type.toUpperCase()) && (
+                <div className="mt-3 p-3 rounded-lg bg-white/60 border border-blue-100">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-lg">
+                      {selectedTemplate.header.type.toUpperCase() === 'IMAGE' ? '🖼️' :
+                        selectedTemplate.header.type.toUpperCase() === 'VIDEO' ? '🎥' : '📄'}
+                    </span>
+                    <p className="text-sm font-medium text-blue-800">
+                      Esta plantilla requiere {selectedTemplate.header.type.toUpperCase() === 'IMAGE' ? 'una imagen' :
+                        selectedTemplate.header.type.toUpperCase() === 'VIDEO' ? 'un video' : 'un documento'}
+                    </p>
+                  </div>
+                  <input
+                    type="url"
+                    className="w-full px-4 py-2 border border-blue-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent"
+                    placeholder={`URL del archivo ${selectedTemplate.header.type.toLowerCase()} (ej: https://example.com/archivo.${selectedTemplate.header.type.toUpperCase() === 'IMAGE' ? 'jpg' :
+                      selectedTemplate.header.type.toUpperCase() === 'VIDEO' ? 'mp4' : 'pdf'
+                      })`}
+                    value={headerMediaUrl}
+                    onChange={(e) => setHeaderMediaUrl(e.target.value)}
+                  />
+                  <p className="text-xs text-gray-500 mt-2">
+                    💡 La URL debe ser pública y accesible.
+                    {selectedTemplate.header.type.toUpperCase() === 'IMAGE' && ' Formatos soportados: JPG, PNG.'}
+                    {selectedTemplate.header.type.toUpperCase() === 'VIDEO' && ' Formatos soportados: MP4.'}
+                    {selectedTemplate.header.type.toUpperCase() === 'DOCUMENT' && ' Formato recomendado: PDF.'}
+                  </p>
+                </div>
+              )}
             </div>
           )}
 
@@ -785,6 +835,13 @@ export default function Home() {
                       </div>
                       {template.header?.text && (
                         <p className="text-xs text-gray-400 mb-1">📌 {template.header.text}</p>
+                      )}
+                      {/* Media header indicator */}
+                      {template.header && ['IMAGE', 'VIDEO', 'DOCUMENT'].includes(template.header.type.toUpperCase()) && (
+                        <p className="text-xs text-blue-600 mb-1">
+                          {template.header.type.toUpperCase() === 'IMAGE' ? '🖼️ Requiere imagen' :
+                            template.header.type.toUpperCase() === 'VIDEO' ? '🎥 Requiere video' : '📄 Requiere documento'}
+                        </p>
                       )}
                       <p className="text-sm text-gray-600 line-clamp-2">{template.body?.text}</p>
                       <div className="flex items-center gap-3 mt-2">

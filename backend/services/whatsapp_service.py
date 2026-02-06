@@ -234,7 +234,8 @@ class WhatsAppService:
         recipients: List[Dict[str, Any]],
         template_name: str,
         language_code: str = "es_CO",
-        variable_mapping: Optional[Dict[str, str]] = None
+        variable_mapping: Optional[Dict[str, str]] = None,
+        header_media_url: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Send template messages to multiple recipients.
@@ -245,12 +246,15 @@ class WhatsAppService:
             language_code: Language code of the template
             variable_mapping: Dict mapping template variables to recipient fields
                               e.g., {'nombre': 'name', 'empresa': 'company'}
+            header_media_url: URL of the media file for templates with media headers
             
         Returns:
             Summary of sent and failed messages
         """
         logger.info(f"📤 Starting bulk send: {len(recipients)} recipients, template: '{template_name}'")
         logger.info(f"Variable mapping: {variable_mapping}")
+        if header_media_url:
+            logger.info(f"Header media URL: {header_media_url}")
         
         results = {
             "total": len(recipients),
@@ -262,19 +266,28 @@ class WhatsAppService:
         # Cache template data ONCE before the loop (optimization)
         cached_template_data = None
         cached_template_vars = []
-        if variable_mapping:
-            cached_template_data = await self.get_template_by_name(template_name)
-            if cached_template_data:
-                # Extract variables in order from template body
-                body_text = ""
-                for comp in cached_template_data.get("components", []):
-                    if comp.get("type") == "BODY":
-                        body_text = comp.get("text", "")
-                        break
-                cached_template_vars = self._extract_variable_names(body_text)
-                logger.info(f"Template variables cached (order): {cached_template_vars}")
-            else:
-                logger.error(f"Could not fetch template '{template_name}' to determine variable order")
+        cached_header_type = None  # Track header type for media
+        
+        # Always fetch template data to check for header type
+        cached_template_data = await self.get_template_by_name(template_name)
+        if cached_template_data:
+            # Extract variables in order from template body
+            body_text = ""
+            for comp in cached_template_data.get("components", []):
+                if comp.get("type") == "BODY":
+                    body_text = comp.get("text", "")
+                elif comp.get("type") == "HEADER":
+                    # Check header format for media types
+                    header_format = comp.get("format", "TEXT")
+                    if header_format in ["IMAGE", "VIDEO", "DOCUMENT"]:
+                        cached_header_type = header_format.lower()
+                        logger.info(f"Template has {header_format} header, media URL required")
+            cached_template_vars = self._extract_variable_names(body_text)
+            logger.info(f"Template variables cached (order): {cached_template_vars}")
+            if cached_header_type:
+                logger.info(f"Template header type: {cached_header_type}")
+        else:
+            logger.error(f"Could not fetch template '{template_name}' to determine variable order")
         
         for recipient in recipients:
             phone = recipient.get("phone")
@@ -290,48 +303,65 @@ class WhatsAppService:
                 })
                 continue
             
-            # Build components for variables using cached template data
-            components = None
-            if variable_mapping and cached_template_data:
-                # Only build components if template actually has variables
-                if cached_template_vars:
-                    # Build parameters in the correct order
-                    body_params = []
-                    for var_name in cached_template_vars:
-                        var_lower = var_name.lower()
-                        # Find the field name for this variable
-                        field_name = variable_mapping.get(var_lower)
-                        if field_name:
-                            value = recipient.get(field_name, "")
-                            if value and str(value).strip():  # Ensure value is not empty or whitespace
-                                body_params.append({
-                                    "type": "text",
-                                    "parameter_name": var_name,  # Include the parameter name!
-                                    "text": str(value).strip()
-                                })
-                                logger.debug(f"Added parameter for {{{{{var_name}}}}}: '{str(value).strip()}'")
-                            else:
-                                logger.warning(f"Variable {{{{{var_name}}}}} maps to field '{field_name}' but value is empty for {recipient.get('name')}")
-                        else:
-                            logger.warning(f"No mapping found for variable {{{{{var_name}}}}}")
-                    
-                    if body_params:
-                        components = [{
-                            "type": "body",
-                            "parameters": body_params
-                        }]
-                        logger.info(f"Final components for {recipient.get('name')}: {components}")
-                    else:
-                        logger.warning(f"No valid parameters for {recipient.get('name')} - all values were empty")
-                else:
-                    logger.info(f"Template has no variables, sending without components")
+            # Build components for variables and header media
+            components = []
             
-            # Send the message
+            # Add header component if media URL is provided and template has media header
+            if header_media_url and cached_header_type:
+                header_component = {
+                    "type": "header",
+                    "parameters": [
+                        {
+                            "type": cached_header_type,
+                            cached_header_type: {
+                                "link": header_media_url
+                            }
+                        }
+                    ]
+                }
+                components.append(header_component)
+                logger.info(f"Added header component with {cached_header_type}: {header_media_url}")
+            
+            # Build body parameters if we have variable mapping
+            if variable_mapping and cached_template_data and cached_template_vars:
+                # Build parameters in the correct order
+                body_params = []
+                for var_name in cached_template_vars:
+                    var_lower = var_name.lower()
+                    # Find the field name for this variable
+                    field_name = variable_mapping.get(var_lower)
+                    if field_name:
+                        value = recipient.get(field_name, "")
+                        if value and str(value).strip():  # Ensure value is not empty or whitespace
+                            body_params.append({
+                                "type": "text",
+                                "parameter_name": var_name,  # Include the parameter name!
+                                "text": str(value).strip()
+                            })
+                            logger.debug(f"Added parameter for {{{{{var_name}}}}}: '{str(value).strip()}'")
+                        else:
+                            logger.warning(f"Variable {{{{{var_name}}}}} maps to field '{field_name}' but value is empty for {recipient.get('name')}")
+                    else:
+                        logger.warning(f"No mapping found for variable {{{{{var_name}}}}}")
+                
+                if body_params:
+                    components.append({
+                        "type": "body",
+                        "parameters": body_params
+                    })
+                    logger.info(f"Added body component for {recipient.get('name')}")
+            elif not cached_template_vars:
+                logger.info(f"Template has no variables, sending without body components")
+            
+            # Send the message with components if we have any
+            final_components = components if components else None
+            logger.info(f"Final components for {recipient.get('name')}: {final_components}")
+            
             result = await self.send_template_message(
                 to_phone=phone,
                 template_name=template_name,
                 language_code=language_code,
-                components=components
+                components=final_components
             )
             
             if result["success"]:

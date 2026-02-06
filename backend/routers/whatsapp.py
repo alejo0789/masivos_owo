@@ -27,6 +27,10 @@ class SendTemplateRequest(BaseModel):
         default=None,
         description="Map template variables to recipient fields. E.g., {'nombre': 'name'}"
     )
+    header_media_url: Optional[str] = Field(
+        default=None,
+        description="URL of the media file (image, video, or document) for templates with media headers"
+    )
 
 
 class SendSingleTemplateRequest(BaseModel):
@@ -106,7 +110,8 @@ async def send_template_bulk(request: SendTemplateRequest):
         recipients=recipients_data,
         template_name=request.template_name,
         language_code=request.language_code,
-        variable_mapping=variable_mapping
+        variable_mapping=variable_mapping,
+        header_media_url=request.header_media_url
     )
     
     # Save to database

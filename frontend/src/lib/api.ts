@@ -240,6 +240,7 @@ export interface WhatsAppSendRequest {
     language_code: string;
     recipients: WhatsAppRecipient[];
     variable_mapping?: Record<string, string>;
+    header_media_url?: string;
 }
 
 export interface WhatsAppMessageResult {
