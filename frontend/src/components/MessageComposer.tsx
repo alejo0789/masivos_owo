@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { WhatsAppTemplate, getApprovedWhatsAppTemplates } from '@/lib/api';
 import AIAssistantModal from './AIAssistantModal';
 
@@ -30,6 +30,107 @@ export default function MessageComposer({
     const [loadingTemplates, setLoadingTemplates] = useState(false);
     const [templateVariables, setTemplateVariables] = useState<Record<string, string>>({});
     const [showAIAssistant, setShowAIAssistant] = useState(false);
+
+    // HTML Editor Config
+    const editorRef = useRef<HTMLDivElement>(null);
+    const [showColorPicker, setShowColorPicker] = useState(false);
+    const [showFontPicker, setShowFontPicker] = useState(false);
+
+    const isHtmlMode = channel === 'email' || channel === 'both';
+    const lastGeneratedContent = useRef('');
+
+    // Initialize editor content when switching to HTML mode or when content content changes externally
+    useEffect(() => {
+        if (isHtmlMode && editorRef.current && content !== lastGeneratedContent.current) {
+            // Only update if the content is different from what we just generated
+            // This prevents cursor jumping when typing
+
+            // Check if it's an OWO HTML template to extract just the body
+            if (content.trim().startsWith('<!DOCTYPE html>') || content.trim().startsWith('<html')) {
+                const contentMatch = content.match(/<!-- Content -->[\s\S]*?<td[^>]*>([\s\S]*?)<\/td>[\s\S]*?<!-- Footer -->/);
+                if (contentMatch && contentMatch[1]) {
+                    if (editorRef.current.innerHTML !== contentMatch[1].trim()) {
+                        editorRef.current.innerHTML = contentMatch[1].trim();
+                    }
+                } else {
+                    // If it's HTML but not our template structure, just show it all (or try to)
+                    if (editorRef.current.innerHTML !== content) {
+                        editorRef.current.innerHTML = content;
+                    }
+                }
+            } else {
+                // If it's plain text, just put it in
+                if (editorRef.current.innerText !== content) {
+                    editorRef.current.innerText = content;
+                }
+            }
+        }
+    }, [content, isHtmlMode]);
+
+    const generateHtmlContent = (bodyContent: string): string => {
+        return `<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${subject || 'Email de OWO'}</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f5f5f5;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f5f5f5; padding: 20px 0;">
+        <tr>
+            <td align="center">
+                <table width="600" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                    <!-- Header -->
+                    <tr>
+                        <td style="background: linear-gradient(135deg, #8B5A9B 0%, #6B4478 100%); padding: 40px 20px; text-align: center;">
+                            <img src="https://owo-public-files.s3.amazonaws.com/mails/logo-mails-light.png" alt="OWO" style="max-width: 200px; height: auto;" />
+                        </td>
+                    </tr>
+                    
+                    <!-- Content -->
+                    <tr>
+                        <td style="padding: 40px 30px; color: #333333; line-height: 1.6;">
+                            ${bodyContent}
+                        </td>
+                    </tr>
+                    
+                    <!-- Footer -->
+                    <tr>
+                        <td style="background-color: #f8f8f8; padding: 30px; text-align: center; border-top: 1px solid #e0e0e0;">
+                            <p style="margin: 0 0 10px 0; font-size: 14px; color: #666666;">
+                                Este buzón de correo es solo para envío de información, por favor no lo respondas porque no podrá ser recibido y atendido.
+                            </p>
+                            <p style="margin: 10px 0 0 0; font-size: 14px; color: #666666;">
+                                Equipo <strong style="color: #8B5A9B;">OWO</strong>
+                            </p>
+                            <p style="margin: 15px 0 0 0; font-size: 12px; color: #999999;">
+                                © 2025 <strong>OWO</strong> by <strong>Owo</strong>tech. Todos los derechos reservados.
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>`;
+    };
+
+    const applyFormat = (command: string, value?: string) => {
+        document.execCommand(command, false, value);
+        editorRef.current?.focus();
+        handleHtmlEditorInput();
+    };
+
+    const handleHtmlEditorInput = () => {
+        if (!editorRef.current) return;
+
+        const innerContent = editorRef.current.innerHTML;
+        const fullContent = generateHtmlContent(innerContent);
+
+        lastGeneratedContent.current = fullContent;
+        onContentChange(fullContent);
+    };
 
     const loadTemplates = async () => {
         if (templates.length > 0) {
@@ -130,11 +231,23 @@ export default function MessageComposer({
     };
 
     const handleApplyAIContent = (html: string) => {
-        // Extract text content from HTML for message composer
-        const tempDiv = document.createElement('div');
-        tempDiv.innerHTML = html;
-        const textContent = tempDiv.textContent || tempDiv.innerText || '';
-        onContentChange(textContent.trim());
+        if (channel === 'email' && isHtmlMode && editorRef.current) {
+            // Extract body content from the AI-generated HTML
+            const contentMatch = html.match(/<td[^>]*style="[^"]*padding[^"]*"[^>]*>([\s\S]*?)<\/td>[\s\S]*?<!-- Footer -->/i);
+            let innerContent = html;
+            if (contentMatch && contentMatch[1]) {
+                innerContent = contentMatch[1].trim();
+            }
+
+            editorRef.current.innerHTML = innerContent;
+            handleHtmlEditorInput();
+        } else {
+            // Extract text content from HTML for message composer (WhatsApp/Text)
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = html;
+            const textContent = tempDiv.textContent || tempDiv.innerText || '';
+            onContentChange(textContent.trim());
+        }
     };
 
     return (
@@ -318,19 +431,225 @@ export default function MessageComposer({
                         </div>
                     )}
 
+
+                    {/* Formatting Toolbar (only for HTML mode) */}
+                    {isHtmlMode && (
+                        <div className="space-y-2 mb-2">
+                            <label className="label">Herramientas de formato</label>
+                            <div className="flex items-center gap-2 p-3 bg-gradient-to-r from-purple-50 to-blue-50 rounded-lg border border-purple-200 flex-wrap">
+                                {/* Basic Formatting */}
+                                <button
+                                    type="button"
+                                    onClick={() => applyFormat('bold')}
+                                    className="w-8 h-8 rounded-lg bg-white border border-gray-300 hover:bg-purple-100 hover:border-purple-400 transition-all shadow-sm flex items-center justify-center"
+                                    title="Negrita (Ctrl+B)"
+                                >
+                                    <strong className="text-gray-700">N</strong>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => applyFormat('italic')}
+                                    className="w-8 h-8 rounded-lg bg-white border border-gray-300 hover:bg-purple-100 hover:border-purple-400 transition-all shadow-sm flex items-center justify-center"
+                                    title="Cursiva (Ctrl+I)"
+                                >
+                                    <em className="text-gray-700">K</em>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => applyFormat('underline')}
+                                    className="w-8 h-8 rounded-lg bg-white border border-gray-300 hover:bg-purple-100 hover:border-purple-400 transition-all shadow-sm flex items-center justify-center"
+                                    title="Subrayado (Ctrl+U)"
+                                >
+                                    <u className="text-gray-700">S</u>
+                                </button>
+
+                                <div className="w-px h-6 bg-gray-300 mx-1"></div>
+
+                                {/* Alignment Buttons */}
+                                <button
+                                    type="button"
+                                    onClick={() => applyFormat('justifyLeft')}
+                                    className="w-8 h-8 rounded-lg bg-white border border-gray-300 hover:bg-purple-100 hover:border-purple-400 transition-all shadow-sm flex items-center justify-center"
+                                    title="Alinear a la izquierda"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-gray-700">
+                                        <line x1="3" y1="6" x2="21" y2="6" />
+                                        <line x1="3" y1="12" x2="15" y2="12" />
+                                        <line x1="3" y1="18" x2="18" y2="18" />
+                                    </svg>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => applyFormat('justifyCenter')}
+                                    className="w-8 h-8 rounded-lg bg-white border border-gray-300 hover:bg-purple-100 hover:border-purple-400 transition-all shadow-sm flex items-center justify-center"
+                                    title="Centrar"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-gray-700">
+                                        <line x1="3" y1="6" x2="21" y2="6" />
+                                        <line x1="6" y1="12" x2="18" y2="12" />
+                                        <line x1="4" y1="18" x2="20" y2="18" />
+                                    </svg>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => applyFormat('justifyRight')}
+                                    className="w-8 h-8 rounded-lg bg-white border border-gray-300 hover:bg-purple-100 hover:border-purple-400 transition-all shadow-sm flex items-center justify-center"
+                                    title="Alinear a la derecha"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-gray-700">
+                                        <line x1="3" y1="6" x2="21" y2="6" />
+                                        <line x1="9" y1="12" x2="21" y2="12" />
+                                        <line x1="6" y1="18" x2="21" y2="18" />
+                                    </svg>
+                                </button>
+
+                                <div className="w-px h-6 bg-gray-300 mx-1"></div>
+
+                                {/* Color Picker */}
+                                <div className="relative">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setShowColorPicker(!showColorPicker);
+                                            setShowFontPicker(false);
+                                        }}
+                                        className={`px-3 py-1.5 rounded-lg border transition-all shadow-sm flex items-center gap-1.5 text-sm ${showColorPicker ? 'bg-purple-100 border-purple-400' : 'bg-white border-gray-300 hover:bg-purple-50'}`}
+                                        title="Color de texto"
+                                    >
+                                        <span className="w-4 h-4 rounded bg-gradient-to-br from-red-500 via-purple-500 to-blue-500"></span>
+                                        <span className="text-gray-700">Color</span>
+                                    </button>
+
+                                    {showColorPicker && (
+                                        <>
+                                            <div className="fixed inset-0 z-40" onClick={() => setShowColorPicker(false)}></div>
+                                            <div className="absolute top-full mt-2 left-0 bg-white rounded-xl border border-gray-200 p-4 min-w-[240px] z-50 animate-fade-in" style={{ boxShadow: '0 10px 40px rgba(0,0,0,0.15)' }}>
+                                                <p className="text-xs font-semibold text-gray-700 mb-3">Colores predefinidos:</p>
+                                                <div className="grid grid-cols-5 gap-2 mb-4">
+                                                    {[
+                                                        { color: '#8B5A9B', name: 'Morado OWO' },
+                                                        { color: '#00B4D8', name: 'Azul OWO' },
+                                                        { color: '#000000', name: 'Negro' },
+                                                        { color: '#EF4444', name: 'Rojo' },
+                                                        { color: '#10B981', name: 'Verde' },
+                                                        { color: '#F59E0B', name: 'Naranja' },
+                                                        { color: '#3B82F6', name: 'Azul' },
+                                                        { color: '#EC4899', name: 'Rosa' },
+                                                        { color: '#6B7280', name: 'Gris' },
+                                                        { color: '#FFFFFF', name: 'Blanco' },
+                                                    ].map((c) => (
+                                                        <button
+                                                            key={c.color}
+                                                            type="button"
+                                                            onClick={() => {
+                                                                applyFormat('foreColor', c.color);
+                                                                setShowColorPicker(false);
+                                                            }}
+                                                            className="w-9 h-9 rounded-lg border-2 border-gray-300 hover:border-purple-500 hover:scale-110 transition-all"
+                                                            style={{
+                                                                backgroundColor: c.color,
+                                                                boxShadow: c.color === '#FFFFFF' ? 'inset 0 0 0 1px #e5e7eb' : 'none'
+                                                            }}
+                                                            title={c.name}
+                                                        />
+                                                    ))}
+                                                </div>
+                                                <div className="border-t border-gray-200 pt-3">
+                                                    <p className="text-xs font-semibold text-gray-700 mb-2">Selector de color personalizado:</p>
+                                                    <div className="flex items-center gap-2">
+                                                        <input
+                                                            type="color"
+                                                            onChange={(e) => {
+                                                                applyFormat('foreColor', e.target.value);
+                                                            }}
+                                                            className="w-12 h-10 rounded-lg border-2 border-gray-300 cursor-pointer"
+                                                            title="Elige cualquier color"
+                                                        />
+                                                        <span className="text-xs text-gray-500">Haz clic para elegir cualquier color</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+
+                                {/* Font Size Picker */}
+                                <div className="relative">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setShowFontPicker(!showFontPicker);
+                                            setShowColorPicker(false);
+                                        }}
+                                        className={`px-3 py-1.5 rounded-lg border transition-all shadow-sm flex items-center gap-1.5 text-sm ${showFontPicker ? 'bg-purple-100 border-purple-400' : 'bg-white border-gray-300 hover:bg-purple-50'}`}
+                                        title="Tamaño de fuente"
+                                    >
+                                        <span className="text-gray-700">Tamaño</span>
+                                    </button>
+
+                                    {showFontPicker && (
+                                        <>
+                                            <div className="fixed inset-0 z-40" onClick={() => setShowFontPicker(false)}></div>
+                                            <div className="absolute top-full mt-2 left-0 bg-white rounded-xl border border-gray-200 p-2 min-w-[140px] z-50 animate-fade-in" style={{ boxShadow: '0 10px 40px rgba(0,0,0,0.15)' }}>
+                                                {[
+                                                    { size: '1', label: 'Muy pequeño' },
+                                                    { size: '2', label: 'Pequeño' },
+                                                    { size: '3', label: 'Normal' },
+                                                    { size: '4', label: 'Mediano' },
+                                                    { size: '5', label: 'Grande' },
+                                                    { size: '6', label: 'Muy grande' },
+                                                    { size: '7', label: 'Enorme' },
+                                                ].map((s) => (
+                                                    <button
+                                                        key={s.size}
+                                                        type="button"
+                                                        onClick={() => {
+                                                            applyFormat('fontSize', s.size);
+                                                            setShowFontPicker(false);
+                                                        }}
+                                                        className="w-full text-left px-3 py-2 rounded-lg hover:bg-purple-50 transition-all text-sm text-gray-700 hover:text-purple-900"
+                                                    >
+                                                        {s.label}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                     {/* Message Content */}
                     <div>
                         <label className="label">
                             {selectedTemplate ? 'Vista previa del mensaje' : 'Contenido del Mensaje'}
                         </label>
-                        <textarea
-                            className={`textarea ${selectedTemplate ? 'bg-gray-50' : ''}`}
-                            placeholder="Escribe tu mensaje aquí..."
-                            rows={6}
-                            value={content}
-                            onChange={(e) => !selectedTemplate && onContentChange(e.target.value)}
-                            readOnly={!!selectedTemplate}
-                        />
+
+
+                        {isHtmlMode ? (
+                            <div
+                                ref={editorRef}
+                                contentEditable
+                                className="min-h-[300px] p-4 rounded-xl border-2 border-gray-200 focus:border-purple-400 focus:outline-none bg-white transition-all"
+                                style={{
+                                    lineHeight: '1.6',
+                                    fontSize: '15px',
+                                    color: '#333'
+                                }}
+                                onInput={handleHtmlEditorInput}
+                                suppressContentEditableWarning
+                            />
+                        ) : (
+                            <textarea
+                                className={`textarea ${selectedTemplate ? 'bg-gray-50' : ''}`}
+                                placeholder="Escribe tu mensaje aquí..."
+                                rows={6}
+                                value={content}
+                                onChange={(e) => !selectedTemplate && onContentChange(e.target.value)}
+                                readOnly={!!selectedTemplate}
+                            />
+                        )}
                         <div className="flex items-center justify-between mt-2 text-sm text-gray-500">
                             <span>{characterCount} caracteres</span>
                             {channel === 'whatsapp' && !selectedTemplate && (

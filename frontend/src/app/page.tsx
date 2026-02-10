@@ -43,6 +43,10 @@ export default function Home() {
   const [previewEmailTemplate, setPreviewEmailTemplate] = useState<Template | null>(null);
   const [showEmailPreview, setShowEmailPreview] = useState(false);
 
+  // HTML Editor State
+  const [showColorPicker, setShowColorPicker] = useState(false);
+  const [showFontPicker, setShowFontPicker] = useState(false);
+
   // File upload
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -66,11 +70,28 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    // Update contentEditable only when template changes, not on every content change
-    if (contentEditableRef.current && selectedEmailTemplate) {
-      contentEditableRef.current.innerHTML = content;
+    // Update contentEditable when template changes, switching channels, or content is cleared
+    if (contentEditableRef.current) {
+      // If we have a selected template, force strict sync (preview mode mostly)
+      if (selectedEmailTemplate) {
+        if (contentEditableRef.current.innerHTML !== content) {
+          contentEditableRef.current.innerHTML = content;
+        }
+      } else {
+        // Manual editing mode
+        // 1. If content is empty (e.g. cleared), empty the editor
+        if (content === '') {
+          if (contentEditableRef.current.innerHTML !== '') {
+            contentEditableRef.current.innerHTML = '';
+          }
+        }
+        // 2. If editor is empty but content has text (e.g. switching channel to email), fill it
+        else if (contentEditableRef.current.innerHTML === '' && content !== '') {
+          contentEditableRef.current.innerHTML = content;
+        }
+      }
     }
-  }, [selectedEmailTemplate]);
+  }, [selectedEmailTemplate, channel, content]);
 
   const loadTemplates = async () => {
     try {
@@ -157,6 +178,15 @@ export default function Home() {
     setSelectedEmailTemplate(null);
     setSubject('');
     setContent('');
+  };
+
+  const applyFormat = (command: string, value?: string) => {
+    document.execCommand(command, false, value);
+    contentEditableRef.current?.focus();
+    // Trigger update
+    if (contentEditableRef.current) {
+      setContent(contentEditableRef.current.innerHTML);
+    }
   };
 
   // Handle channel change - clear templates from other channels
@@ -1027,12 +1057,134 @@ export default function Home() {
                   />
                 </div>
               ) : (
-                <textarea
-                  className="w-full h-full resize-none bg-transparent border-0 focus:ring-0 focus:outline-none text-gray-800 placeholder-gray-400 text-base leading-relaxed"
-                  placeholder="Escribe tu mensaje aquí... ✨"
-                  value={content}
-                  onChange={(e) => setContent(e.target.value)}
-                />
+                <>
+                  {channel === 'email' ? (
+                    <div className="h-full flex flex-col">
+                      {/* Toolbar */}
+                      <div className="mb-2 p-2 bg-gradient-to-r from-purple-50 to-blue-50 rounded-lg border border-purple-200 flex flex-wrap gap-2 items-center">
+                        {/* Basic Formatting */}
+                        <div className="flex items-center gap-1">
+                          <button type="button" onClick={() => applyFormat('bold')} className="p-1.5 rounded hover:bg-white hover:text-purple-600 transition-colors" title="Negrita">
+                            <strong className="text-sm">N</strong>
+                          </button>
+                          <button type="button" onClick={() => applyFormat('italic')} className="p-1.5 rounded hover:bg-white hover:text-purple-600 transition-colors" title="Cursiva">
+                            <em className="text-sm">K</em>
+                          </button>
+                          <button type="button" onClick={() => applyFormat('underline')} className="p-1.5 rounded hover:bg-white hover:text-purple-600 transition-colors" title="Subrayado">
+                            <u className="text-sm">S</u>
+                          </button>
+                        </div>
+                        <div className="w-px h-4 bg-gray-300 mx-1"></div>
+
+                        {/* Alignment */}
+                        <div className="flex items-center gap-1">
+                          <button type="button" onClick={() => applyFormat('justifyLeft')} className="p-1.5 rounded hover:bg-white hover:text-purple-600 transition-colors" title="Izquierda">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="15" y2="12" /><line x1="3" y1="18" x2="18" y2="18" /></svg>
+                          </button>
+                          <button type="button" onClick={() => applyFormat('justifyCenter')} className="p-1.5 rounded hover:bg-white hover:text-purple-600 transition-colors" title="Centro">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="3" y1="6" x2="21" y2="6" /><line x1="6" y1="12" x2="18" y2="12" /><line x1="4" y1="18" x2="20" y2="18" /></svg>
+                          </button>
+                          <button type="button" onClick={() => applyFormat('justifyRight')} className="p-1.5 rounded hover:bg-white hover:text-purple-600 transition-colors" title="Derecha">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="3" y1="6" x2="21" y2="6" /><line x1="9" y1="12" x2="21" y2="12" /><line x1="6" y1="18" x2="21" y2="18" /></svg>
+                          </button>
+                        </div>
+                        <div className="w-px h-4 bg-gray-300 mx-1"></div>
+
+                        {/* Color Picker */}
+                        <div className="relative">
+                          <button
+                            type="button"
+                            onClick={() => { setShowColorPicker(!showColorPicker); setShowFontPicker(false); }}
+                            className="flex items-center gap-1 px-2 py-1 rounded hover:bg-white text-sm"
+                          >
+                            <span className="w-3 h-3 rounded-full bg-gradient-to-br from-red-500 via-purple-500 to-blue-500"></span>
+                            <span>Color</span>
+                          </button>
+                          {showColorPicker && (
+                            <>
+                              <div className="fixed inset-0 z-40" onClick={() => setShowColorPicker(false)}></div>
+                              <div className="absolute top-full mt-2 left-0 bg-white rounded-lg shadow-xl border border-gray-200 p-3 z-50 min-w-[200px]">
+                                <div className="grid grid-cols-5 gap-2 mb-3">
+                                  {['#8B5A9B', '#00B4D8', '#000000', '#EF4444', '#10B981', '#F59E0B', '#3B82F6', '#EC4899', '#6B7280', '#FFFFFF'].map(c => (
+                                    <button
+                                      key={c}
+                                      type="button"
+                                      onClick={() => { applyFormat('foreColor', c); setShowColorPicker(false); }}
+                                      className="w-6 h-6 rounded border border-gray-200 hover:scale-110 transition-transform"
+                                      style={{ backgroundColor: c }}
+                                    />
+                                  ))}
+                                </div>
+                                <div className="flex items-center gap-2 border-t pt-2">
+                                  <input type="color" onChange={(e) => applyFormat('foreColor', e.target.value)} className="w-6 h-6 p-0 border-0 rounded cursor-pointer" />
+                                  <span className="text-xs text-gray-500">Personalizado</span>
+                                </div>
+                              </div>
+                            </>
+                          )}
+                        </div>
+
+                        {/* Font Size */}
+                        <div className="relative">
+                          <button
+                            type="button"
+                            onClick={() => { setShowFontPicker(!showFontPicker); setShowColorPicker(false); }}
+                            className="flex items-center gap-1 px-2 py-1 rounded hover:bg-white text-sm"
+                          >
+                            <span className="text-xs">Aa</span>
+                            <span>Tamaño</span>
+                          </button>
+                          {showFontPicker && (
+                            <>
+                              <div className="fixed inset-0 z-40" onClick={() => setShowFontPicker(false)}></div>
+                              <div className="absolute top-full mt-2 left-0 bg-white rounded-lg shadow-xl border border-gray-200 p-1 z-50 min-w-[120px]">
+                                {[
+                                  { size: '1', label: 'Muy pequeño' },
+                                  { size: '2', label: 'Pequeño' },
+                                  { size: '3', label: 'Normal' },
+                                  { size: '4', label: 'Mediano' },
+                                  { size: '5', label: 'Grande' },
+                                  { size: '6', label: 'Muy grande' },
+                                  { size: '7', label: 'Enorme' },
+                                ].map((s) => (
+                                  <button
+                                    key={s.size}
+                                    type="button"
+                                    onClick={() => { applyFormat('fontSize', s.size); setShowFontPicker(false); }}
+                                    className="w-full text-left px-3 py-1.5 hover:bg-purple-50 text-sm rounded"
+                                  >
+                                    {s.label}
+                                  </button>
+                                ))}
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Editor */}
+                      <div
+                        ref={contentEditableRef}
+                        contentEditable
+                        suppressContentEditableWarning
+                        onInput={(e) => setContent(e.currentTarget.innerHTML)}
+                        className="flex-1 p-4 rounded-xl border-2 border-gray-200 focus:border-purple-400 focus:outline-none bg-white overflow-y-auto transition-all"
+                        style={{
+                          lineHeight: '1.6',
+                          fontSize: '15px',
+                          minHeight: '200px'
+                        }}
+                      />
+                    </div>
+                  ) : (
+                    <textarea
+                      className="w-full h-full resize-none bg-transparent border-0 focus:ring-0 focus:outline-none text-gray-800 placeholder-gray-400 text-base leading-relaxed"
+                      placeholder="Escribe tu mensaje aquí... ✨"
+                      value={content}
+                      onChange={(e) => setContent(e.target.value)}
+                    />
+                  )}
+                </>
               )}
             </div>
 
