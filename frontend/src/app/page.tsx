@@ -438,7 +438,13 @@ export default function Home() {
           // For email channel, wrap content in full HTML template
           let emailContent = content;
           if (channel === 'email') {
-            emailContent = generateFullEmailHtml(content, subject || 'Mensaje de OWO');
+            // If sending without a template (plain text), convert newlines to <br>
+            // This fixes the issue where line breaks are lost in HTML emails
+            let bodyContent = content;
+            if (!selectedEmailTemplate) {
+              bodyContent = content.replace(/\n/g, '<br />');
+            }
+            emailContent = generateFullEmailHtml(bodyContent, subject || 'Mensaje de OWO');
           }
 
           const response = await sendBulkMessages({
@@ -1297,7 +1303,7 @@ export default function Home() {
                 <h3 className="text-sm font-semibold text-gray-700 mb-3">Vista Previa del Email</h3>
                 <div className="rounded-xl overflow-hidden border-2 border-gray-200 shadow-lg bg-white">
                   <iframe
-                    srcDoc={generateFullEmailHtml(content, subject || 'Mensaje de OWO')}
+                    srcDoc={generateFullEmailHtml(content.replace(/\n/g, '<br />'), subject || 'Mensaje de OWO')}
                     className="w-full h-[600px] border-0"
                     title="Vista previa del email"
                     sandbox="allow-same-origin"

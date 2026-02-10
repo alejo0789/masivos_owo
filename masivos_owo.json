@@ -1,110 +1,327 @@
 {
-  "name": "masivos_owo",
+  "updatedAt": "2026-02-05T14:12:58.288Z",
+  "createdAt": "2026-01-23T20:08:14.622Z",
+  "id": "rwf9fwf3OoRje1R5dyZJN",
+  "name": "masivos_test_adjuntos",
+  "description": null,
+  "active": true,
+  "isArchived": false,
   "nodes": [
     {
       "parameters": {
         "httpMethod": "POST",
         "path": "ab0dfe61-d2e6-4c98-89c4-b4fc254fae69",
-        "responseMode": "responseNode",
         "options": {}
       },
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
       "position": [
-        -656,
-        -32
+        -1072,
+        -16
       ],
-      "id": "48a78134-e32a-408c-9f41-9ac1240d9337",
+      "id": "6394785f-1015-4f11-860d-a9c783724989",
       "name": "Webhook",
       "webhookId": "ab0dfe61-d2e6-4c98-89c4-b4fc254fae69"
     },
     {
       "parameters": {
-        "toRecipients": "={{ $json[\"body.recipients\"].email }}",
-        "additionalFields": {}
+        "jsCode": "// === PREPARAR DATOS Y ADJUNTOS ===\nconst webhookData = $input.first().json.body;\n\nconst recipients = webhookData.recipients || [];\nconst subject = webhookData.subject || 'Sin asunto';\nconst attachments = webhookData.attachments || [];\n// --- CAPTURAR BATCH_ID ---\nconst batch_id = webhookData.batch_id; \nconst hasAttachments = attachments.length > 0;\n\n// Construir objetos binarios para los adjuntos\nconst binaryData = {};\n\nif (hasAttachments) {\n  for (let i = 0; i < attachments.length; i++) {\n    const att = attachments[i];\n    binaryData[`attachment_${i}`] = {\n      data: att.data,\n      mimeType: att.mimeType || 'application/octet-stream',\n      fileName: att.filename || `adjunto_${i}`\n    };\n  }\n}\n\n// Crear un item por cada destinatario\nconst outputItems = recipients.map(recipient => {\n  return {\n    json: {\n      // --- INCLUIR BATCH_ID EN CADA ITEM ---\n      batch_id: batch_id, \n      email: recipient.email,\n      name: recipient.name || '',\n      message: recipient.message,\n      subject: subject,\n      hasAttachments: hasAttachments,\n      attachmentCount: attachments.length,\n      attachmentKeys: Object.keys(binaryData)\n    },\n    binary: hasAttachments ? { ...binaryData } : undefined\n  };\n});\n\nreturn outputItems;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -832,
+        -16
+      ],
+      "id": "3c86eb61-6c01-493e-80e0-0bd70d26b56b",
+      "name": "Preparar Datos y Adjuntos"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.hasAttachments }}",
+                    "rightValue": true,
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "equals"
+                    },
+                    "id": "condition-with-attachments"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.hasAttachments }}",
+                    "rightValue": false,
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "equals"
+                    },
+                    "id": "condition-without-attachments"
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        -592,
+        -16
+      ],
+      "id": "e1b366ec-8d35-4afb-8d9d-f9821ec14e75",
+      "name": "¿Tiene Adjuntos?"
+    },
+    {
+      "parameters": {
+        "toRecipients": "={{ $json.email }}",
+        "subject": "={{ $json.subject }}",
+        "bodyContent": "={{ $json.message }}",
+        "additionalFields": {
+          "bodyContentType": "html"
+        }
       },
       "type": "n8n-nodes-base.microsoftOutlook",
       "typeVersion": 2,
       "position": [
-        -128,
-        -80
+        -352,
+        96
       ],
-      "id": "f608790c-a9ac-4ff7-9ab2-80446040f86b",
-      "name": "Send a message",
-      "webhookId": "14ffc8d2-2a75-487a-8c8a-fb26fe3e997d",
+      "id": "3a59966c-7039-45c9-8dde-b2ee6a9c3db8",
+      "name": "Enviar Sin Adjuntos",
+      "webhookId": "a086fe30-c37f-4adb-b8c6-2ff7af59241a",
       "credentials": {
         "microsoftOutlookOAuth2Api": {
-          "id": "dD5pGvlU00N513gT",
-          "name": "Microsoft Outlook account"
+          "id": "gegqa2AG6ezyxg6E",
+          "name": "Microsoft Outlook account 3"
         }
       },
-      "onError": "continueErrorOutput"
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
-        "respondWith": "json",
-        "options": {}
+        "jsCode": "// === PREPARAR ADJUNTOS PARA OUTLOOK ===\n// Este nodo prepara la estructura de adjuntos que espera el nodo de Outlook\n\nconst item = $input.first();\nconst attachmentKeys = item.json.attachmentKeys || [];\n\n// Pasar el item tal cual, el nodo de Outlook usará los binarios\nreturn [item];"
       },
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1.4,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [
-        112,
-        -128
+        -352,
+        -144
       ],
-      "id": "44fda1db-4de5-4882-8320-18cbe034c5ca",
-      "name": "Respond to Webhook"
+      "id": "d89104fc-e07e-4636-8dc4-a8aa676eb36a",
+      "name": "Preparar para Outlook"
     },
     {
       "parameters": {
-        "fieldToSplitOut": "body.recipients",
-        "include": "allOtherFields",
+        "toRecipients": "={{ $json.email }}",
+        "subject": "={{ $json.subject }}",
+        "bodyContent": "={{ $json.message }}",
+        "additionalFields": {
+          "attachments": {
+            "attachments": [
+              {
+                "binaryPropertyName": "=attachment_0"
+              }
+            ]
+          },
+          "bodyContentType": "html"
+        }
+      },
+      "type": "n8n-nodes-base.microsoftOutlook",
+      "typeVersion": 2,
+      "position": [
+        -112,
+        -144
+      ],
+      "id": "2f0e0a5d-ab0f-41bc-ae15-4ff991b08b34",
+      "name": "Enviar Con Adjuntos",
+      "webhookId": "18172cc1-c57a-4de1-81e5-b1e9357b0f14",
+      "credentials": {
+        "microsoftOutlookOAuth2Api": {
+          "id": "gegqa2AG6ezyxg6E",
+          "name": "Microsoft Outlook account 3"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// === AGREGAR RESULTADOS ===\nconst allItems = $input.all();\nconst results = [];\nlet sent = 0;\nlet failed = 0;\n\n// 1. Recuperar batch_id directamente del Webhook\nconst batch_id = $('Webhook').first().json.body.batch_id;\n\n// 2. Recuperar la lista original de correos para cruzar los datos\nconst originalItems = $('Preparar Datos y Adjuntos').all();\n\nfor (let i = 0; i < allItems.length; i++) {\n  const item = allItems[i];\n  \n  // 3. Buscamos el email en el nodo original usando el mismo índice [i]\n  const email = (originalItems[i] && originalItems[i].json.email) || 'desconocido';\n  \n  const errorMessage = item.json.error || item.error?.message || null;\n  const hasError = !!errorMessage;\n  \n  results.push({\n    email: email,\n    success: !hasError,\n    error: errorMessage\n  });\n  \n  if (hasError) {\n    failed++;\n  } else {\n    sent++;\n  }\n}\n\nreturn [{\n  json: {\n    batch_id: batch_id,\n    success: failed === 0,\n    total: allItems.length,\n    sent: sent,\n    failed: failed,\n    results: results\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        128,
+        -144
+      ],
+      "id": "91684550-b49e-4544-91da-18b8866f465b",
+      "name": "Agregar Resultados (Con Adjuntos)"
+    },
+    {
+      "parameters": {
+        "jsCode": "// === AGREGAR RESULTADOS ===\nconst allItems = $input.all();\nconst results = [];\nlet sent = 0;\nlet failed = 0;\n\n// 1. Recuperar batch_id directamente del Webhook\nconst batch_id = $('Webhook').first().json.body.batch_id;\n\n// 2. Recuperar la lista original de correos para cruzar los datos\nconst originalItems = $('Preparar Datos y Adjuntos').all();\n\nfor (let i = 0; i < allItems.length; i++) {\n  const item = allItems[i];\n  \n  // 3. Buscamos el email en el nodo original usando el mismo índice [i]\n  const email = (originalItems[i] && originalItems[i].json.email) || 'desconocido';\n  \n  const errorMessage = item.json.error || item.error?.message || null;\n  const hasError = !!errorMessage;\n  \n  results.push({\n    email: email,\n    success: !hasError,\n    error: errorMessage\n  });\n  \n  if (hasError) {\n    failed++;\n  } else {\n    sent++;\n  }\n}\n\nreturn [{\n  json: {\n    batch_id: batch_id,\n    success: failed === 0,\n    total: allItems.length,\n    sent: sent,\n    failed: failed,\n    results: results\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -112,
+        96
+      ],
+      "id": "3870c026-e83e-4e9a-a52b-7e3c0c6b8d96",
+      "name": "Agregar Resultados (Sin Adjuntos)"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://192.168.2.91:8001/messages/callback",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
         "options": {}
       },
-      "type": "n8n-nodes-base.splitOut",
-      "typeVersion": 1,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
       "position": [
-        -400,
-        -32
+        96,
+        96
       ],
-      "id": "35efa0c9-77bf-49d8-a5d7-e74246e68716",
-      "name": "Split Out"
+      "id": "ce3e0fd5-919e-4fbf-873c-f78e3ae11c97",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://192.168.2.91:8001/messages/callback",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        304,
+        -144
+      ],
+      "id": "32acd9b0-7025-4130-929b-82a5b6f35d62",
+      "name": "HTTP Request1"
     }
   ],
-  "pinData": {},
   "connections": {
     "Webhook": {
       "main": [
         [
           {
-            "node": "Split Out",
+            "node": "Preparar Datos y Adjuntos",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Send a message": {
+    "Preparar Datos y Adjuntos": {
       "main": [
         [
           {
-            "node": "Respond to Webhook",
+            "node": "¿Tiene Adjuntos?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Tiene Adjuntos?": {
+      "main": [
+        [
+          {
+            "node": "Preparar para Outlook",
             "type": "main",
             "index": 0
           }
         ],
-        []
+        [
+          {
+            "node": "Enviar Sin Adjuntos",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
-    "Respond to Webhook": {
-      "main": [
-        []
-      ]
-    },
-    "Split Out": {
+    "Enviar Sin Adjuntos": {
       "main": [
         [
           {
-            "node": "Send a message",
+            "node": "Agregar Resultados (Sin Adjuntos)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar para Outlook": {
+      "main": [
+        [
+          {
+            "node": "Enviar Con Adjuntos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar Con Adjuntos": {
+      "main": [
+        [
+          {
+            "node": "Agregar Resultados (Con Adjuntos)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agregar Resultados (Con Adjuntos)": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agregar Resultados (Sin Adjuntos)": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
             "type": "main",
             "index": 0
           }
@@ -112,15 +329,368 @@
       ]
     }
   },
-  "active": true,
   "settings": {
-    "executionOrder": "v1"
+    "executionOrder": "v1",
+    "availableInMCP": false
   },
-  "versionId": "5b460e79-69b1-4e2a-8008-38d19b245511",
+  "staticData": null,
   "meta": {
-    "templateCredsSetupCompleted": true,
-    "instanceId": "8d23bc59ace10dae756f2ceee80008ca5891945b1c49a3c28bc13eb82fa7dccb"
+    "templateCredsSetupCompleted": true
   },
-  "id": "p687Ukxm5gMBMS9x",
-  "tags": []
+  "pinData": {},
+  "versionId": "ea688aad-f317-4b61-982c-d76427706670",
+  "activeVersionId": "ea688aad-f317-4b61-982c-d76427706670",
+  "versionCounter": 45,
+  "triggerCount": 1,
+  "activeVersion": {
+    "updatedAt": "2026-02-05T14:12:58.280Z",
+    "createdAt": "2026-02-05T14:12:58.280Z",
+    "versionId": "ea688aad-f317-4b61-982c-d76427706670",
+    "workflowId": "rwf9fwf3OoRje1R5dyZJN",
+    "nodes": [
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "ab0dfe61-d2e6-4c98-89c4-b4fc254fae69",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2.1,
+        "position": [
+          -1072,
+          -16
+        ],
+        "id": "6394785f-1015-4f11-860d-a9c783724989",
+        "name": "Webhook",
+        "webhookId": "ab0dfe61-d2e6-4c98-89c4-b4fc254fae69"
+      },
+      {
+        "parameters": {
+          "jsCode": "// === PREPARAR DATOS Y ADJUNTOS ===\nconst webhookData = $input.first().json.body;\n\nconst recipients = webhookData.recipients || [];\nconst subject = webhookData.subject || 'Sin asunto';\nconst attachments = webhookData.attachments || [];\n// --- CAPTURAR BATCH_ID ---\nconst batch_id = webhookData.batch_id; \nconst hasAttachments = attachments.length > 0;\n\n// Construir objetos binarios para los adjuntos\nconst binaryData = {};\n\nif (hasAttachments) {\n  for (let i = 0; i < attachments.length; i++) {\n    const att = attachments[i];\n    binaryData[`attachment_${i}`] = {\n      data: att.data,\n      mimeType: att.mimeType || 'application/octet-stream',\n      fileName: att.filename || `adjunto_${i}`\n    };\n  }\n}\n\n// Crear un item por cada destinatario\nconst outputItems = recipients.map(recipient => {\n  return {\n    json: {\n      // --- INCLUIR BATCH_ID EN CADA ITEM ---\n      batch_id: batch_id, \n      email: recipient.email,\n      name: recipient.name || '',\n      message: recipient.message,\n      subject: subject,\n      hasAttachments: hasAttachments,\n      attachmentCount: attachments.length,\n      attachmentKeys: Object.keys(binaryData)\n    },\n    binary: hasAttachments ? { ...binaryData } : undefined\n  };\n});\n\nreturn outputItems;"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -832,
+          -16
+        ],
+        "id": "3c86eb61-6c01-493e-80e0-0bd70d26b56b",
+        "name": "Preparar Datos y Adjuntos"
+      },
+      {
+        "parameters": {
+          "rules": {
+            "values": [
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": true,
+                    "leftValue": "",
+                    "typeValidation": "strict",
+                    "version": 3
+                  },
+                  "conditions": [
+                    {
+                      "leftValue": "={{ $json.hasAttachments }}",
+                      "rightValue": true,
+                      "operator": {
+                        "type": "boolean",
+                        "operation": "equals"
+                      },
+                      "id": "condition-with-attachments"
+                    }
+                  ],
+                  "combinator": "and"
+                }
+              },
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": true,
+                    "leftValue": "",
+                    "typeValidation": "strict",
+                    "version": 3
+                  },
+                  "conditions": [
+                    {
+                      "leftValue": "={{ $json.hasAttachments }}",
+                      "rightValue": false,
+                      "operator": {
+                        "type": "boolean",
+                        "operation": "equals"
+                      },
+                      "id": "condition-without-attachments"
+                    }
+                  ],
+                  "combinator": "and"
+                }
+              }
+            ]
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.switch",
+        "typeVersion": 3.4,
+        "position": [
+          -592,
+          -16
+        ],
+        "id": "e1b366ec-8d35-4afb-8d9d-f9821ec14e75",
+        "name": "¿Tiene Adjuntos?"
+      },
+      {
+        "parameters": {
+          "toRecipients": "={{ $json.email }}",
+          "subject": "={{ $json.subject }}",
+          "bodyContent": "={{ $json.message }}",
+          "additionalFields": {
+            "bodyContentType": "html"
+          }
+        },
+        "type": "n8n-nodes-base.microsoftOutlook",
+        "typeVersion": 2,
+        "position": [
+          -352,
+          96
+        ],
+        "id": "3a59966c-7039-45c9-8dde-b2ee6a9c3db8",
+        "name": "Enviar Sin Adjuntos",
+        "webhookId": "a086fe30-c37f-4adb-b8c6-2ff7af59241a",
+        "credentials": {
+          "microsoftOutlookOAuth2Api": {
+            "id": "gegqa2AG6ezyxg6E",
+            "name": "Microsoft Outlook account 3"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "jsCode": "// === PREPARAR ADJUNTOS PARA OUTLOOK ===\n// Este nodo prepara la estructura de adjuntos que espera el nodo de Outlook\n\nconst item = $input.first();\nconst attachmentKeys = item.json.attachmentKeys || [];\n\n// Pasar el item tal cual, el nodo de Outlook usará los binarios\nreturn [item];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -352,
+          -144
+        ],
+        "id": "d89104fc-e07e-4636-8dc4-a8aa676eb36a",
+        "name": "Preparar para Outlook"
+      },
+      {
+        "parameters": {
+          "toRecipients": "={{ $json.email }}",
+          "subject": "={{ $json.subject }}",
+          "bodyContent": "={{ $json.message }}",
+          "additionalFields": {
+            "attachments": {
+              "attachments": [
+                {
+                  "binaryPropertyName": "=attachment_0"
+                }
+              ]
+            },
+            "bodyContentType": "html"
+          }
+        },
+        "type": "n8n-nodes-base.microsoftOutlook",
+        "typeVersion": 2,
+        "position": [
+          -112,
+          -144
+        ],
+        "id": "2f0e0a5d-ab0f-41bc-ae15-4ff991b08b34",
+        "name": "Enviar Con Adjuntos",
+        "webhookId": "18172cc1-c57a-4de1-81e5-b1e9357b0f14",
+        "credentials": {
+          "microsoftOutlookOAuth2Api": {
+            "id": "gegqa2AG6ezyxg6E",
+            "name": "Microsoft Outlook account 3"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "jsCode": "// === AGREGAR RESULTADOS ===\nconst allItems = $input.all();\nconst results = [];\nlet sent = 0;\nlet failed = 0;\n\n// 1. Recuperar batch_id directamente del Webhook\nconst batch_id = $('Webhook').first().json.body.batch_id;\n\n// 2. Recuperar la lista original de correos para cruzar los datos\nconst originalItems = $('Preparar Datos y Adjuntos').all();\n\nfor (let i = 0; i < allItems.length; i++) {\n  const item = allItems[i];\n  \n  // 3. Buscamos el email en el nodo original usando el mismo índice [i]\n  const email = (originalItems[i] && originalItems[i].json.email) || 'desconocido';\n  \n  const errorMessage = item.json.error || item.error?.message || null;\n  const hasError = !!errorMessage;\n  \n  results.push({\n    email: email,\n    success: !hasError,\n    error: errorMessage\n  });\n  \n  if (hasError) {\n    failed++;\n  } else {\n    sent++;\n  }\n}\n\nreturn [{\n  json: {\n    batch_id: batch_id,\n    success: failed === 0,\n    total: allItems.length,\n    sent: sent,\n    failed: failed,\n    results: results\n  }\n}];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          128,
+          -144
+        ],
+        "id": "91684550-b49e-4544-91da-18b8866f465b",
+        "name": "Agregar Resultados (Con Adjuntos)"
+      },
+      {
+        "parameters": {
+          "jsCode": "// === AGREGAR RESULTADOS ===\nconst allItems = $input.all();\nconst results = [];\nlet sent = 0;\nlet failed = 0;\n\n// 1. Recuperar batch_id directamente del Webhook\nconst batch_id = $('Webhook').first().json.body.batch_id;\n\n// 2. Recuperar la lista original de correos para cruzar los datos\nconst originalItems = $('Preparar Datos y Adjuntos').all();\n\nfor (let i = 0; i < allItems.length; i++) {\n  const item = allItems[i];\n  \n  // 3. Buscamos el email en el nodo original usando el mismo índice [i]\n  const email = (originalItems[i] && originalItems[i].json.email) || 'desconocido';\n  \n  const errorMessage = item.json.error || item.error?.message || null;\n  const hasError = !!errorMessage;\n  \n  results.push({\n    email: email,\n    success: !hasError,\n    error: errorMessage\n  });\n  \n  if (hasError) {\n    failed++;\n  } else {\n    sent++;\n  }\n}\n\nreturn [{\n  json: {\n    batch_id: batch_id,\n    success: failed === 0,\n    total: allItems.length,\n    sent: sent,\n    failed: failed,\n    results: results\n  }\n}];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -112,
+          96
+        ],
+        "id": "3870c026-e83e-4e9a-a52b-7e3c0c6b8d96",
+        "name": "Agregar Resultados (Sin Adjuntos)"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "http://192.168.2.91:8001/messages/callback",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify($json) }}",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.3,
+        "position": [
+          96,
+          96
+        ],
+        "id": "ce3e0fd5-919e-4fbf-873c-f78e3ae11c97",
+        "name": "HTTP Request"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "http://192.168.2.91:8001/messages/callback",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify($json) }}",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.3,
+        "position": [
+          304,
+          -144
+        ],
+        "id": "32acd9b0-7025-4130-929b-82a5b6f35d62",
+        "name": "HTTP Request1"
+      }
+    ],
+    "connections": {
+      "Webhook": {
+        "main": [
+          [
+            {
+              "node": "Preparar Datos y Adjuntos",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Preparar Datos y Adjuntos": {
+        "main": [
+          [
+            {
+              "node": "¿Tiene Adjuntos?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "¿Tiene Adjuntos?": {
+        "main": [
+          [
+            {
+              "node": "Preparar para Outlook",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Enviar Sin Adjuntos",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Enviar Sin Adjuntos": {
+        "main": [
+          [
+            {
+              "node": "Agregar Resultados (Sin Adjuntos)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Preparar para Outlook": {
+        "main": [
+          [
+            {
+              "node": "Enviar Con Adjuntos",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Enviar Con Adjuntos": {
+        "main": [
+          [
+            {
+              "node": "Agregar Resultados (Con Adjuntos)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Agregar Resultados (Con Adjuntos)": {
+        "main": [
+          [
+            {
+              "node": "HTTP Request1",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Agregar Resultados (Sin Adjuntos)": {
+        "main": [
+          [
+            {
+              "node": "HTTP Request",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "alejandro carvajal",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-02-05T14:13:01.331Z",
+        "id": 74,
+        "workflowId": "rwf9fwf3OoRje1R5dyZJN",
+        "versionId": "ea688aad-f317-4b61-982c-d76427706670",
+        "event": "activated",
+        "userId": "de8d0752-fee5-467a-bd27-8e8af92a6c23"
+      },
+      {
+        "createdAt": "2026-02-10T18:59:56.906Z",
+        "id": 93,
+        "workflowId": "rwf9fwf3OoRje1R5dyZJN",
+        "versionId": "ea688aad-f317-4b61-982c-d76427706670",
+        "event": "activated",
+        "userId": "de8d0752-fee5-467a-bd27-8e8af92a6c23"
+      }
+    ]
+  }
 }

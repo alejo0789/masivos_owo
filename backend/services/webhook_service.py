@@ -3,6 +3,7 @@ import httpx
 import base64
 import os
 from typing import Optional, List, Dict, Any
+import mimetypes
 from config import get_settings
 
 settings = get_settings()
@@ -164,9 +165,15 @@ class WebhookService:
             if os.path.exists(filepath):
                 with open(filepath, "rb") as f:
                     data = base64.b64encode(f.read()).decode("utf-8")
+                # Guess MIME type
+                mime_type, _ = mimetypes.guess_type(filepath)
+                if not mime_type:
+                    mime_type = "application/octet-stream"
+                
                 attachments.append({
                     "filename": filename,
-                    "data": data
+                    "data": data,
+                    "mimeType": mime_type
                 })
         
         return attachments
