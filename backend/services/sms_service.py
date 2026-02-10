@@ -147,8 +147,8 @@ class SMSService:
         Send SMS to multiple recipients.
         
         Args:
-            recipients: List of dicts with 'phone' and optionally 'name'
-            message: Message text
+            recipients: List of dicts with 'phone', optionally 'name' and 'message' (personalized)
+            message: Default message text (used if recipient doesn't have custom message)
             test_mode: If True, simulates sending
         
         Returns:
@@ -163,6 +163,43 @@ class SMSService:
                 "error": "LabsMobile no está configurado"
             }
         
+        # Check if recipients have individual messages (personalized)
+        has_personalized = any(r.get("message") for r in recipients)
+        
+        if has_personalized:
+            # Send individual SMS to each recipient with their personalized message
+            total = len(recipients)
+            sent = 0
+            failed = 0
+            total_credits = 0
+            
+            for recipient in recipients:
+                phone = recipient.get("phone", "")
+                if not phone:
+                    failed += 1
+                    continue
+                
+                # Use personalized message or default
+                msg = recipient.get("message", message)
+                
+                result = await self.send_single(phone, msg, test_mode)
+                if result.get("success"):
+                    sent += 1
+                    # Ensure credits_used is a number, default to 0 if None
+                    credits = result.get("credits_used") or 0
+                    total_credits += credits
+                else:
+                    failed += 1
+            
+            return {
+                "success": sent > 0,
+                "total": total,
+                "sent": sent,
+                "failed": failed,
+                "credits_used": total_credits
+            }
+        
+        # Original bulk send logic (same message to all)
         # Format all phone numbers
         formatted_recipients = []
         for r in recipients:

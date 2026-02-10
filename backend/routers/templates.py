@@ -21,7 +21,7 @@ router = APIRouter(prefix="/templates", tags=["templates"])
 @router.get("", response_model=List[TemplateResponse])
 async def get_templates(
     search: Optional[str] = Query(None, description="Search by name"),
-    channel: Optional[str] = Query(None, pattern="^(whatsapp|email|both)$"),
+    channel: Optional[str] = Query(None, pattern="^(whatsapp|email|sms|both)$"),
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db)

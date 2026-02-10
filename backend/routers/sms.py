@@ -68,6 +68,8 @@ async def send_bulk_sms(request: BulkSMSRequest, db: AsyncSession = Depends(get_
         for recipient in request.recipients:
             name = recipient.get("name", "Unknown")
             phone = recipient.get("phone", "")
+            # Use personalized message if available, otherwise use default
+            message_content = recipient.get("message", request.message)
             
             status = "sent" if general_success else "failed"
             error = general_error
@@ -80,7 +82,7 @@ async def send_bulk_sms(request: BulkSMSRequest, db: AsyncSession = Depends(get_
             log_entry = MessageLog(
                 recipient_name=name,
                 recipient_phone=phone,
-                message_content=request.message,
+                message_content=message_content,  # Save personalized message
                 channel="sms",
                 status=status,
                 error_message=error,

@@ -43,6 +43,12 @@ export default function Home() {
   const [previewEmailTemplate, setPreviewEmailTemplate] = useState<Template | null>(null);
   const [showEmailPreview, setShowEmailPreview] = useState(false);
 
+  // SMS Templates
+  const [smsTemplates, setSmsTemplates] = useState<Template[]>([]);
+  const [showSmsTemplates, setShowSmsTemplates] = useState(false);
+  const [selectedSmsTemplate, setSelectedSmsTemplate] = useState<Template | null>(null);
+  const [loadingSmsTemplates, setLoadingSmsTemplates] = useState(false);
+
   // HTML Editor State
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [showFontPicker, setShowFontPicker] = useState(false);
@@ -58,6 +64,7 @@ export default function Home() {
   useEffect(() => {
     loadTemplates();
     loadEmailTemplates();
+    loadSmsTemplates();
 
     // Check for contacts from groups page
     const groupContacts = sessionStorage.getItem('selectedGroupContacts');
@@ -119,6 +126,18 @@ export default function Home() {
       console.error('Error loading email templates:', err);
     } finally {
       setLoadingEmailTemplates(false);
+    }
+  };
+
+  const loadSmsTemplates = async () => {
+    try {
+      setLoadingSmsTemplates(true);
+      const templates = await getTemplates({ channel: 'sms' });
+      setSmsTemplates(templates);
+    } catch (err) {
+      console.error('Error loading SMS templates:', err);
+    } finally {
+      setLoadingSmsTemplates(false);
     }
   };
 
@@ -213,6 +232,34 @@ export default function Home() {
     setCustomVariables({});
   };
 
+  const applySmsTemplate = (template: Template) => {
+    setContent(template.content);
+    setSelectedSmsTemplate(template);
+    setChannel('sms');
+    setShowSmsTemplates(false);
+
+    // Extract variables from content
+    const contentVars = extractVariables(template.content);
+
+    // Filter out automatic variables (these are replaced from contact data)
+    const automaticVars = ['nombre', 'name', 'telefono', 'phone', 'primer_nombre', 'first_name'];
+    const customVars = contentVars.filter(varName =>
+      !automaticVars.includes(varName.toLowerCase())
+    );
+
+    const initialVars: Record<string, string> = {};
+    customVars.forEach(varName => {
+      initialVars[varName] = '';
+    });
+    setCustomVariables(initialVars);
+  };
+
+  const clearSmsTemplate = () => {
+    setSelectedSmsTemplate(null);
+    setContent('');
+    setCustomVariables({});
+  };
+
   const applyFormat = (command: string, value?: string) => {
     document.execCommand(command, false, value);
     contentEditableRef.current?.focus();
@@ -222,7 +269,6 @@ export default function Home() {
     }
   };
 
-  // Handle channel change - clear templates from other channels
   // Handle channel change - clear templates from other channels
   const handleChannelChange = (newChannel: 'whatsapp' | 'email' | 'sms') => {
     // If changing away from email, clear email template
@@ -234,6 +280,11 @@ export default function Home() {
     // If changing away from whatsapp, clear whatsapp template
     if (newChannel !== 'whatsapp' && selectedTemplate) {
       setSelectedTemplate(null);
+      setContent('');
+    }
+    // If changing away from sms, clear sms template
+    if (newChannel !== 'sms' && selectedSmsTemplate) {
+      setSelectedSmsTemplate(null);
       setContent('');
     }
 
@@ -474,23 +525,50 @@ export default function Home() {
       } else {
         // Regular message via SMS or n8n webhook
         if (channel === 'sms') {
-          // SMS Sending Logic
-          const recipients = selectedContacts
+          // SMS Sending Logic with per-contact variable replacement
+          const recipientsWithMessages = selectedContacts
             .filter(c => c.phone) // Only contacts with phone
-            .map(c => ({
-              phone: c.phone!,
-              name: c.name
-            }));
+            .map(c => {
+              // Replace variables for each contact individually
+              let personalizedMessage = content;
 
-          if (recipients.length === 0) {
+              // Replace {{nombre}} or {{name}}
+              personalizedMessage = personalizedMessage.replace(/\{\{nombre\}\}/gi, c.name || '');
+              personalizedMessage = personalizedMessage.replace(/\{\{name\}\}/gi, c.name || '');
+
+              // Replace {{telefono}} or {{phone}}
+              personalizedMessage = personalizedMessage.replace(/\{\{telefono\}\}/gi, c.phone || '');
+              personalizedMessage = personalizedMessage.replace(/\{\{phone\}\}/gi, c.phone || '');
+
+              // Replace {{primer_nombre}} or {{first_name}}
+              const firstName = c.name ? c.name.split(' ')[0] : '';
+              personalizedMessage = personalizedMessage.replace(/\{\{primer_nombre\}\}/gi, firstName);
+              personalizedMessage = personalizedMessage.replace(/\{\{first_name\}\}/gi, firstName);
+
+              // Replace custom variables if any (static values for all)
+              if (Object.keys(customVariables).length > 0) {
+                Object.keys(customVariables).forEach(varName => {
+                  const regex = new RegExp(`\\{\\{${varName}\\}\\}`, 'gi');
+                  personalizedMessage = personalizedMessage.replace(regex, customVariables[varName]);
+                });
+              }
+
+              return {
+                phone: c.phone!,
+                name: c.name,
+                message: personalizedMessage
+              };
+            });
+
+          if (recipientsWithMessages.length === 0) {
             setError('Ninguno de los contactos seleccionados tiene número de teléfono');
             setSending(false);
             return;
           }
 
           const response = await sendBulkSMS({
-            recipients,
-            message: content,
+            recipients: recipientsWithMessages,
+            message: content, // Send original template for logging
           });
 
           // Adapt SMS response to match BulkSendResponse structure generically
@@ -506,6 +584,7 @@ export default function Home() {
           if (response.success) {
             setSelectedContacts([]);
             setContent('');
+            setSelectedSmsTemplate(null);
             setCustomVariables({});
           } else {
             setError(response.error || 'Error enviando SMS');
@@ -906,6 +985,40 @@ export default function Home() {
             </div>
           )}
 
+          {/* Custom Variables for SMS Templates */}
+          {channel === 'sms' && Object.keys(customVariables).length > 0 && (
+            <div className="animate-fade-in p-4 rounded-xl bg-gradient-to-br from-purple-50 to-pink-50 border border-purple-200">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-lg">✏️</span>
+                <p className="text-sm font-bold text-purple-900">Variables Personalizadas</p>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {Object.keys(customVariables).map((varName) => (
+                  <div key={varName} className="flex flex-col gap-1">
+                    <label className="text-xs font-medium text-purple-700">
+                      {`{{${varName}}}`}
+                    </label>
+                    <input
+                      type="text"
+                      className="w-full px-3 py-2 border border-purple-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-400 focus:border-transparent bg-white"
+                      placeholder={`Valor para {{${varName}}}`}
+                      value={customVariables[varName]}
+                      onChange={(e) => setCustomVariables({
+                        ...customVariables,
+                        [varName]: e.target.value
+                      })}
+                    />
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-purple-600 mt-3 flex items-start gap-1">
+                <span>💡</span>
+                <span>Estas variables se reemplazarán en el contenido del SMS.</span>
+              </p>
+            </div>
+          )}
+
+
           {/* Message Composer Card */}
           <div className="composer-container flex flex-col flex-1" style={{ minHeight: '320px' }}>
 
@@ -913,17 +1026,19 @@ export default function Home() {
             <div className={styles.header}>
               <div className="flex items-center gap-3">
                 <span className="text-lg">
-                  {selectedTemplate ? '📱' : selectedEmailTemplate ? '📧' : channel === 'whatsapp' ? '💬' : channel === 'email' ? '📧' : '📨'}
+                  {selectedTemplate ? '📱' : selectedEmailTemplate ? '📧' : selectedSmsTemplate ? '💬' : channel === 'whatsapp' ? '💬' : channel === 'email' ? '📧' : '📨'}
                 </span>
                 <span className={`font-semibold ${channel === 'whatsapp' || selectedTemplate ? 'text-white' : 'text-gray-800'}`}>
                   {selectedTemplate
                     ? `WhatsApp Template: ${selectedTemplate.name}`
                     : selectedEmailTemplate
                       ? `Email Template: ${selectedEmailTemplate.name}`
-                      : channel === 'whatsapp' ? 'WhatsApp Message'
-                        : channel === 'email' ? 'Email Message'
-                          : channel === 'sms' ? 'Mensaje SMS'
-                            : 'Mensaje'}
+                      : selectedSmsTemplate
+                        ? `SMS Template: ${selectedSmsTemplate.name}`
+                        : channel === 'whatsapp' ? 'WhatsApp Message'
+                          : channel === 'email' ? 'Email Message'
+                            : channel === 'sms' ? 'Mensaje SMS'
+                              : 'Mensaje'}
                 </span>
               </div>
               {/* WhatsApp Templates Button */}
@@ -961,6 +1076,25 @@ export default function Home() {
                         <polyline points="22,6 12,13 2,6" />
                       </svg>
                       Plantillas Email ({emailTemplates.length})
+                    </>
+                  )}
+                </button>
+              )}
+              {/* SMS Templates Button */}
+              {channel === 'sms' && (
+                <button
+                  onClick={() => setShowSmsTemplates(!showSmsTemplates)}
+                  disabled={loadingSmsTemplates}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all text-[#8B5A9B] hover:bg-[#8B5A9B]/10"
+                >
+                  {loadingSmsTemplates ? (
+                    <div className="spinner" style={{ width: '16px', height: '16px' }} />
+                  ) : (
+                    <>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                      </svg>
+                      Plantillas SMS ({smsTemplates.length})
                     </>
                   )}
                 </button>
@@ -1068,6 +1202,48 @@ export default function Home() {
                         </button>
                       </div>
                     </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* SMS Templates Dropdown */}
+            {showSmsTemplates && smsTemplates.length > 0 && (
+              <div className="p-4 border-b border-purple-100 animate-fade-in bg-gradient-to-r from-purple-50 to-pink-50">
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-xs text-gray-600 font-semibold uppercase tracking-wider">
+                    💬 Plantillas de SMS
+                  </p>
+                  <button onClick={() => setShowSmsTemplates(false)} className="text-gray-400 hover:text-gray-600">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <line x1="18" y1="6" x2="6" y2="18" />
+                      <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
+                  </button>
+                </div>
+                <div className="space-y-2 max-h-64 overflow-y-auto">
+                  {smsTemplates.map((template) => (
+                    <button
+                      key={template.id}
+                      onClick={() => applySmsTemplate(template)}
+                      className="w-full text-left p-3 bg-white rounded-xl border border-gray-200 hover:border-purple-400 hover:shadow-md transition-all"
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="font-semibold text-gray-900">{template.name}</span>
+                        <span className="badge badge-purple text-xs">💬 SMS</span>
+                      </div>
+                      <p className="text-sm text-gray-600 line-clamp-2 font-mono">
+                        {template.content.length > 100 ? template.content.substring(0, 100) + '...' : template.content}
+                      </p>
+                      <div className="flex items-center gap-2 mt-2">
+                        <span className="text-xs text-gray-400">{template.content.length} caracteres</span>
+                        {template.content.match(/\{\{(\w+)\}\}/g) && (
+                          <span className="text-xs text-purple-600">
+                            🔤 {template.content.match(/\{\{(\w+)\}\}/g)?.length} variable(s)
+                          </span>
+                        )}
+                      </div>
+                    </button>
                   ))}
                 </div>
               </div>
@@ -1317,7 +1493,7 @@ export default function Home() {
             {/* Bottom Bar */}
             <div className="composer-footer">
               <div className="flex items-center gap-4">
-                {!selectedTemplate && (
+                {!selectedTemplate && channel !== 'sms' && (
                   <>
                     <input
                       ref={fileInputRef}
