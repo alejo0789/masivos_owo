@@ -218,8 +218,14 @@ export default function Home() {
     const contentVars = extractVariables(templateContent);
     const allVars = [...new Set([...subjectVars, ...contentVars])];
 
+    // Filter out automatic variables (these are replaced from contact data)
+    const automaticVars = ['nombre', 'name', 'telefono', 'phone', 'primer_nombre', 'first_name', 'email'];
+    const customVars = allVars.filter(varName =>
+      !automaticVars.includes(varName.toLowerCase())
+    );
+
     const initialVars: Record<string, string> = {};
-    allVars.forEach(varName => {
+    customVars.forEach(varName => {
       initialVars[varName] = '';
     });
     setCustomVariables(initialVars);
