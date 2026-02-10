@@ -20,24 +20,24 @@ def replace_variables(message: str, recipient: Dict[str, Any]) -> str:
     Replace template variables in message with recipient data.
     
     Supported variables:
-    - {nombre} or {name} - Recipient's name
-    - {email} - Recipient's email
-    - {telefono} or {phone} - Recipient's phone
-    - {primer_nombre} or {first_name} - First name only
+    - {{nombre}} or {{name}} - Recipient's name
+    - {{email}} - Recipient's email
+    - {{telefono}} or {{phone}} - Recipient's phone
+    - {{primer_nombre}} or {{first_name}} - First name only
     """
     if not message:
         return message
     
     replacements = {
         # Spanish variables
-        '{nombre}': recipient.get('name', ''),
-        '{email}': recipient.get('email', ''),
-        '{telefono}': recipient.get('phone', ''),
-        '{primer_nombre}': recipient.get('name', '').split()[0] if recipient.get('name') else '',
+        '{{nombre}}': recipient.get('name', ''),
+        '{{email}}': recipient.get('email', ''),
+        '{{telefono}}': recipient.get('phone', ''),
+        '{{primer_nombre}}': recipient.get('name', '').split()[0] if recipient.get('name') else '',
         # English variables (for compatibility)
-        '{name}': recipient.get('name', ''),
-        '{phone}': recipient.get('phone', ''),
-        '{first_name}': recipient.get('name', '').split()[0] if recipient.get('name') else '',
+        '{{name}}': recipient.get('name', ''),
+        '{{phone}}': recipient.get('phone', ''),
+        '{{first_name}}': recipient.get('name', '').split()[0] if recipient.get('name') else '',
     }
     
     result = message
