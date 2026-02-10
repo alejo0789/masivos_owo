@@ -47,6 +47,9 @@ export default function Home() {
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [showFontPicker, setShowFontPicker] = useState(false);
 
+  // Custom Variables State
+  const [customVariables, setCustomVariables] = useState<Record<string, string>>({});
+
   // File upload
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -131,6 +134,15 @@ export default function Home() {
     return matches;
   };
 
+  const replaceVariables = (text: string, variables: Record<string, string>): string => {
+    let result = text;
+    Object.entries(variables).forEach(([key, value]) => {
+      const regex = new RegExp(`\\{\\{${key}\\}\\}`, 'gi');
+      result = result.replace(regex, value || `{{${key}}}`);
+    });
+    return result;
+  };
+
   const getPreviewContent = (template: WhatsAppTemplate, contactName?: string) => {
     let text = template.body?.text || '';
     // Replace common variable patterns with contact name
@@ -147,12 +159,21 @@ export default function Home() {
     setSelectedTemplate(template);
     setChannel('whatsapp');
     setShowTemplates(false);
+
+    // Extract variables and initialize custom variables state
+    const variables = extractVariables(bodyText);
+    const initialVars: Record<string, string> = {};
+    variables.forEach(varName => {
+      initialVars[varName] = '';
+    });
+    setCustomVariables(initialVars);
   };
 
   const clearTemplate = () => {
     setSelectedTemplate(null);
     setContent('');
     setHeaderMediaUrl('');
+    setCustomVariables({});
   };
 
   const applyEmailTemplate = (template: Template) => {
@@ -172,12 +193,24 @@ export default function Home() {
     setSelectedEmailTemplate(template);
     setChannel('email');
     setShowEmailTemplates(false);
+
+    // Extract variables from both subject and content
+    const subjectVars = extractVariables(template.subject || '');
+    const contentVars = extractVariables(templateContent);
+    const allVars = [...new Set([...subjectVars, ...contentVars])];
+
+    const initialVars: Record<string, string> = {};
+    allVars.forEach(varName => {
+      initialVars[varName] = '';
+    });
+    setCustomVariables(initialVars);
   };
 
   const clearEmailTemplate = () => {
     setSelectedEmailTemplate(null);
     setSubject('');
     setContent('');
+    setCustomVariables({});
   };
 
   const applyFormat = (command: string, value?: string) => {
@@ -378,7 +411,7 @@ export default function Home() {
         // Extract actual variables from the template
         const templateVarsInBody = extractVariables(selectedTemplate.body?.text || '');
 
-        // Define all possible mappings
+        // Define all possible mappings for automatic contact fields
         const allMappings: Record<string, string> = {
           'nombre': 'name',
           'name': 'name',
@@ -399,11 +432,30 @@ export default function Home() {
           }
         });
 
+        // Prepare custom variables for WhatsApp (static values that apply to all recipients)
+        // We need to add these to each recipient's data
+        const customVarsForRecipients: Record<string, string> = {};
+        Object.entries(customVariables).forEach(([key, value]) => {
+          if (value.trim()) {
+            customVarsForRecipients[key] = value;
+          }
+        });
+
         const response = await sendWhatsAppTemplate({
           template_name: selectedTemplate.name,
           language_code: selectedTemplate.language,
-          recipients,
-          variable_mapping: variableMapping,
+          recipients: recipients.map(r => ({
+            ...r,
+            ...customVarsForRecipients // Add custom variables to each recipient
+          })),
+          variable_mapping: {
+            ...variableMapping,
+            // Add custom variables to the mapping (they'll use the same value for all)
+            ...Object.keys(customVarsForRecipients).reduce((acc, key) => {
+              acc[key.toLowerCase()] = key; // Map variable name to itself in recipient data
+              return acc;
+            }, {} as Record<string, string>)
+          },
           header_media_url: headerMediaUrl || undefined,
         });
 
@@ -414,6 +466,7 @@ export default function Home() {
           setContent('');
           setSelectedTemplate(null);
           setHeaderMediaUrl('');
+          setCustomVariables({});
           uploadedFiles.forEach(f => f.preview && URL.revokeObjectURL(f.preview));
           setUploadedFiles([]);
           if (fileInputRef.current) fileInputRef.current.value = '';
@@ -453,6 +506,7 @@ export default function Home() {
           if (response.success) {
             setSelectedContacts([]);
             setContent('');
+            setCustomVariables({});
           } else {
             setError(response.error || 'Error enviando SMS');
           }
@@ -467,19 +521,24 @@ export default function Home() {
 
           // For email channel, wrap content in full HTML template
           let emailContent = content;
+          let emailSubject = subject;
+
           if (channel === 'email') {
-            // If sending without a template (plain text), convert newlines to <br>
-            // This fixes the issue where line breaks are lost in HTML emails
+            // Replace custom variables in content and subject
             let bodyContent = content;
-            if (!selectedEmailTemplate) {
+            if (selectedEmailTemplate && Object.keys(customVariables).length > 0) {
+              bodyContent = replaceVariables(content, customVariables);
+              emailSubject = replaceVariables(subject || '', customVariables);
+            } else if (!selectedEmailTemplate) {
+              // If sending without a template (plain text), convert newlines to <br>
               bodyContent = content.replace(/\n/g, '<br />');
             }
-            emailContent = generateFullEmailHtml(bodyContent, subject || 'Mensaje de OWO');
+            emailContent = generateFullEmailHtml(bodyContent, emailSubject || 'Mensaje de OWO');
           }
 
           const response = await sendBulkMessages({
             recipients,
-            subject: subject || undefined,
+            subject: emailSubject || undefined,
             content: emailContent,
             channel: channel as 'whatsapp' | 'email', // Cast since we removed 'both' but API might still support it
             attachments: uploadedFiles.map(f => f.name),
@@ -492,6 +551,7 @@ export default function Home() {
             setSubject('');
             setContent('');
             setSelectedTemplate(null);
+            setCustomVariables({});
             uploadedFiles.forEach(f => f.preview && URL.revokeObjectURL(f.preview));
             setUploadedFiles([]);
             if (fileInputRef.current) fileInputRef.current.value = '';
@@ -734,6 +794,39 @@ export default function Home() {
                 </div>
               )}
 
+              {/* Custom Variables Input - for variables not auto-mapped */}
+              {Object.keys(customVariables).length > 0 && (
+                <div className="mt-3 p-4 rounded-lg bg-gradient-to-br from-purple-50 to-pink-50 border border-purple-200">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-lg">✏️</span>
+                    <p className="text-sm font-bold text-purple-900">Variables Personalizadas</p>
+                  </div>
+                  <div className="space-y-3">
+                    {Object.keys(customVariables).map((varName) => (
+                      <div key={varName} className="flex flex-col gap-1">
+                        <label className="text-xs font-medium text-purple-700">
+                          {`{{${varName}}}`}
+                        </label>
+                        <input
+                          type="text"
+                          className="w-full px-3 py-2 border border-purple-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-400 focus:border-transparent bg-white"
+                          placeholder={`Valor para {{${varName}}}`}
+                          value={customVariables[varName]}
+                          onChange={(e) => setCustomVariables({
+                            ...customVariables,
+                            [varName]: e.target.value
+                          })}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-xs text-purple-600 mt-3 flex items-start gap-1">
+                    <span>💡</span>
+                    <span>Estas variables se aplicarán a todos los mensajes enviados.</span>
+                  </p>
+                </div>
+              )}
+
               {/* Header Media URL input - show when template has IMAGE, VIDEO or DOCUMENT header */}
               {selectedTemplate.header && ['IMAGE', 'VIDEO', 'DOCUMENT'].includes(selectedTemplate.header.type.toUpperCase()) && (
                 <div className="mt-3 p-3 rounded-lg bg-white/60 border border-blue-100">
@@ -777,6 +870,39 @@ export default function Home() {
                 value={subject}
                 onChange={(e) => setSubject(e.target.value)}
               />
+            </div>
+          )}
+
+          {/* Custom Variables for Email Templates */}
+          {channel === 'email' && Object.keys(customVariables).length > 0 && (
+            <div className="animate-fade-in p-4 rounded-xl bg-gradient-to-br from-blue-50 to-cyan-50 border border-blue-200">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-lg">✏️</span>
+                <p className="text-sm font-bold text-blue-900">Variables Personalizadas</p>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {Object.keys(customVariables).map((varName) => (
+                  <div key={varName} className="flex flex-col gap-1">
+                    <label className="text-xs font-medium text-blue-700">
+                      {`{{${varName}}}`}
+                    </label>
+                    <input
+                      type="text"
+                      className="w-full px-3 py-2 border border-blue-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent bg-white"
+                      placeholder={`Valor para {{${varName}}}`}
+                      value={customVariables[varName]}
+                      onChange={(e) => setCustomVariables({
+                        ...customVariables,
+                        [varName]: e.target.value
+                      })}
+                    />
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-blue-600 mt-3 flex items-start gap-1">
+                <span>💡</span>
+                <span>Estas variables se reemplazarán en el asunto y contenido del email.</span>
+              </p>
             </div>
           )}
 
