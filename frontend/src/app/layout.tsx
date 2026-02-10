@@ -14,11 +14,7 @@ export const metadata: Metadata = {
   title: "Mensajería Masiva | OWO",
   description: "Sistema de envío masivo de mensajes por WhatsApp y Email - Powered by OWO",
   keywords: ["mensajería", "masivo", "whatsapp", "email", "owo"],
-  icons: {
-    icon: "/favicon.ico",
-    shortcut: "/favicon.ico",
-    apple: "/favicon.ico",
-  },
+
 };
 
 export default function RootLayout({
