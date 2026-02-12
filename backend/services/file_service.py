@@ -41,8 +41,18 @@ class FileService:
         ext = self._get_file_extension(original_filename)
         unique_id = uuid.uuid4().hex[:8]
         name = os.path.splitext(original_filename)[0]
-        # Clean the name (remove special chars)
-        clean_name = "".join(c for c in name if c.isalnum() or c in "._- ")[:50]
+        
+        # Clean the name:
+        # 1. Replace spaces with underscores
+        # 2. Keep only alphanumeric, dots, underscores, and dashes
+        # 3. Limit length to 7 chars
+        clean_name = name.replace(" ", "_")
+        clean_name = "".join(c for c in clean_name if c.isalnum() or c in "._-")[:7]
+        
+        # Ensure name isn't empty after cleaning
+        if not clean_name:
+            clean_name = "file"
+            
         return f"{clean_name}_{unique_id}{ext}"
     
     async def validate_file(self, file: UploadFile) -> Tuple[bool, str]:
