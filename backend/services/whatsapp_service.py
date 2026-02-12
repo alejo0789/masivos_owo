@@ -3,6 +3,7 @@ import httpx
 import re
 import logging
 from typing import List, Optional, Dict, Any
+from urllib.parse import quote
 from config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -317,7 +318,7 @@ class WhatsAppService:
                         {
                             "type": param_type,
                             param_type: { # e.g. "video": { "link": ... }
-                                "link": header_media_url
+                                "link": quote(header_media_url, safe=":/")
                             }
                         }
                     ]
