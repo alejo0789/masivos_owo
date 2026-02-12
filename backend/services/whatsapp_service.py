@@ -308,19 +308,22 @@ class WhatsAppService:
             
             # Add header component if media URL is provided and template has media header
             if header_media_url and cached_header_type:
+                # Determine parameter type (image, video, document)
+                param_type = cached_header_type.lower()
+                
                 header_component = {
                     "type": "header",
                     "parameters": [
                         {
-                            "type": cached_header_type,
-                            cached_header_type: {
+                            "type": param_type,
+                            param_type: { # e.g. "video": { "link": ... }
                                 "link": header_media_url
                             }
                         }
                     ]
                 }
                 components.append(header_component)
-                logger.info(f"Added header component with {cached_header_type}: {header_media_url}")
+                logger.info(f"Added header component with {param_type}: {header_media_url}")
             
             # Build body parameters if we have variable mapping
             if variable_mapping and cached_template_data and cached_template_vars:
