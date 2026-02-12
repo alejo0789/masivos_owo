@@ -424,6 +424,7 @@ export default function Home() {
 
   // Header File Upload
   const [headerFileUploading, setHeaderFileUploading] = useState(false);
+  const [headerFileName, setHeaderFileName] = useState<string | null>(null);
   const headerFileInputRef = useRef<HTMLInputElement>(null);
 
   const handleHeaderFileUpload = async (files: FileList | null) => {
@@ -445,8 +446,7 @@ export default function Home() {
         const publicUrl = `${baseUrl}/uploads/${filename}`;
 
         setHeaderMediaUrl(publicUrl);
-
-        // Show success feedback if needed, or just rely on the URL appearing in the input
+        setHeaderFileName(file.name);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al subir archivo de cabecera');
@@ -454,6 +454,11 @@ export default function Home() {
       setHeaderFileUploading(false);
       if (headerFileInputRef.current) headerFileInputRef.current.value = '';
     }
+  };
+
+  const clearHeaderFile = () => {
+    setHeaderMediaUrl('');
+    setHeaderFileName(null);
   };
 
   // Check if selected template requires media header
@@ -961,62 +966,99 @@ export default function Home() {
                   </div>
 
                   <div className="space-y-3">
-                    {/* URL Input */}
-                    <input
-                      type="url"
-                      className="w-full px-4 py-2 border border-blue-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent"
-                      placeholder={`URL del archivo ${selectedTemplate.header.type.toLowerCase()} (ej: https://example.com/archivo.${selectedTemplate.header.type.toUpperCase() === 'IMAGE' ? 'jpg' :
-                        selectedTemplate.header.type.toUpperCase() === 'VIDEO' ? 'mp4' : 'pdf'
-                        })`}
-                      value={headerMediaUrl}
-                      onChange={(e) => setHeaderMediaUrl(e.target.value)}
-                    />
-
-                    <div className="flex items-center gap-2">
-                      <div className="h-px bg-blue-200 flex-1"></div>
-                      <span className="text-xs text-blue-400 font-medium">O</span>
-                      <div className="h-px bg-blue-200 flex-1"></div>
-                    </div>
-
-                    {/* File Upload Button */}
-                    <input
-                      ref={headerFileInputRef}
-                      type="file"
-                      accept={selectedTemplate.header.type.toUpperCase() === 'IMAGE' ? 'image/*' :
-                        selectedTemplate.header.type.toUpperCase() === 'VIDEO' ? 'video/*' :
-                          '.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx'}
-                      className="hidden"
-                      onChange={(e) => handleHeaderFileUpload(e.target.files)}
-                    />
-                    <button
-                      onClick={() => headerFileInputRef.current?.click()}
-                      disabled={headerFileUploading}
-                      className="w-full py-2 px-4 rounded-lg bg-blue-50 border border-blue-200 hover:bg-blue-100 text-blue-700 text-sm font-medium transition-all flex items-center justify-center gap-2"
-                    >
-                      {headerFileUploading ? (
-                        <>
-                          <div className="spinner" style={{ width: '16px', height: '16px', borderColor: '#3B82F6', borderRightColor: 'transparent' }} />
-                          Subiendo...
-                        </>
-                      ) : (
-                        <>
-                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                            <polyline points="17 8 12 3 7 8" />
-                            <line x1="12" y1="3" x2="12" y2="15" />
+                    {headerMediaUrl && headerFileName ? (
+                      <div className="flex items-center justify-between p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                        <div className="flex items-center gap-3 overflow-hidden">
+                          <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600">
+                            {selectedTemplate.header.type.toUpperCase() === 'IMAGE' ? (
+                              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" /></svg>
+                            ) : selectedTemplate.header.type.toUpperCase() === 'VIDEO' ? (
+                              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18" /><line x1="7" y1="2" x2="7" y2="22" /><line x1="17" y1="2" x2="17" y2="22" /><line x1="2" y1="12" x2="22" y2="12" /><line x1="2" y1="7" x2="7" y2="7" /><line x1="2" y1="17" x2="7" y2="17" /><line x1="17" y1="17" x2="22" y2="17" /><line x1="17" y1="7" x2="22" y2="7" /></svg>
+                            ) : (
+                              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /><polyline points="10 9 9 9 8 9" /></svg>
+                            )}
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-blue-900 truncate max-w-[200px]" title={headerFileName}>
+                              {headerFileName}
+                            </p>
+                            <a href={headerMediaUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline">
+                              Ver archivo
+                            </a>
+                          </div>
+                        </div>
+                        <button
+                          onClick={clearHeaderFile}
+                          className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-red-100 text-gray-400 hover:text-red-600 transition-colors"
+                          title="Eliminar archivo"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                            <line x1="6" y1="6" x2="18" y2="18"></line>
                           </svg>
-                          Subir archivo desde mi equipo
-                        </>
-                      )}
-                    </button>
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <input
+                          type="url"
+                          className="w-full px-4 py-2 border border-blue-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent"
+                          placeholder={`URL del archivo ${selectedTemplate.header.type.toLowerCase()} (ej: https://example.com/archivo.${selectedTemplate.header.type.toUpperCase() === 'IMAGE' ? 'jpg' :
+                            selectedTemplate.header.type.toUpperCase() === 'VIDEO' ? 'mp4' : 'pdf'
+                            })`}
+                          value={headerMediaUrl}
+                          onChange={(e) => setHeaderMediaUrl(e.target.value)}
+                        />
+
+                        <div className="flex items-center gap-2">
+                          <div className="h-px bg-blue-200 flex-1"></div>
+                          <span className="text-xs text-blue-400 font-medium">O</span>
+                          <div className="h-px bg-blue-200 flex-1"></div>
+                        </div>
+
+                        {/* File Upload Button */}
+                        <input
+                          ref={headerFileInputRef}
+                          type="file"
+                          accept={selectedTemplate.header.type.toUpperCase() === 'IMAGE' ? 'image/*' :
+                            selectedTemplate.header.type.toUpperCase() === 'VIDEO' ? 'video/*' :
+                              '.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx'}
+                          className="hidden"
+                          onChange={(e) => handleHeaderFileUpload(e.target.files)}
+                        />
+                        <button
+                          onClick={() => headerFileInputRef.current?.click()}
+                          disabled={headerFileUploading}
+                          className="w-full py-2 px-4 rounded-lg bg-blue-50 border border-blue-200 hover:bg-blue-100 text-blue-700 text-sm font-medium transition-all flex items-center justify-center gap-2"
+                        >
+                          {headerFileUploading ? (
+                            <>
+                              <div className="spinner" style={{ width: '16px', height: '16px', borderColor: '#3B82F6', borderRightColor: 'transparent' }} />
+                              Subiendo...
+                            </>
+                          ) : (
+                            <>
+                              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                <polyline points="17 8 12 3 7 8" />
+                                <line x1="12" y1="3" x2="12" y2="15" />
+                              </svg>
+                              Subir archivo desde mi equipo
+                            </>
+                          )}
+                        </button>
+                      </>
+                    )}
                   </div>
 
-                  <p className="text-xs text-gray-500 mt-2">
-                    💡 La URL debe ser pública y accesible.
-                    {selectedTemplate.header.type.toUpperCase() === 'IMAGE' && ' Formatos soportados: JPG, PNG.'}
-                    {selectedTemplate.header.type.toUpperCase() === 'VIDEO' && ' Formatos soportados: MP4.'}
-                    {selectedTemplate.header.type.toUpperCase() === 'DOCUMENT' && ' Formato recomendado: PDF.'}
-                  </p>
+                  {!headerFileName && (
+                    <p className="text-xs text-gray-500 mt-2">
+                      💡 La URL debe ser pública y accesible.
+                      {selectedTemplate.header.type.toUpperCase() === 'IMAGE' && ' Formatos soportados: JPG, PNG.'}
+                      {selectedTemplate.header.type.toUpperCase() === 'VIDEO' && ' Formatos soportados: MP4.'}
+                      {selectedTemplate.header.type.toUpperCase() === 'DOCUMENT' && ' Formato recomendado: PDF.'}
+                    </p>
+                  )}
                 </div>
               )}
             </div>
