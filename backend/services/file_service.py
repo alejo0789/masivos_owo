@@ -17,6 +17,8 @@ class FileService:
         ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".txt", ".csv",
         # Images
         ".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg",
+        # Video
+        ".mp4",
         # Others
         ".zip", ".rar"
     }
