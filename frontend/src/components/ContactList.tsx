@@ -270,7 +270,7 @@ export default function ContactList({ selectedContacts, onSelectionChange, chann
         // Create a temporary contact
         const newContact: Contact = {
             id: `manual-${Date.now()}`,
-            name: manualContactName.trim() || (isEmail ? manualInput.split('@')[0] : 'Contacto manual'),
+            name: manualContactName.trim(), // Leave empty to allow fallback to custom variables
             phone: isPhone ? manualInput.trim() : undefined,
             email: isEmail ? manualInput.trim() : undefined,
         };
@@ -360,7 +360,7 @@ export default function ContactList({ selectedContacts, onSelectionChange, chann
             const isEmail = item.includes('@');
             return {
                 id: `bulk-${Date.now()}-${index}`,
-                name: '!', // Default name as per user request
+                name: '', // Leave empty to allow fallback to custom variables
                 phone: !isEmail ? item : undefined,
                 email: isEmail ? item : undefined,
             };

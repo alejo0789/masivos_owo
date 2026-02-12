@@ -218,14 +218,8 @@ export default function Home() {
     const contentVars = extractVariables(templateContent);
     const allVars = [...new Set([...subjectVars, ...contentVars])];
 
-    // Filter out automatic variables (these are replaced from contact data)
-    const automaticVars = ['nombre', 'name', 'telefono', 'phone', 'primer_nombre', 'first_name', 'email'];
-    const customVars = allVars.filter(varName =>
-      !automaticVars.includes(varName.toLowerCase())
-    );
-
     const initialVars: Record<string, string> = {};
-    customVars.forEach(varName => {
+    allVars.forEach(varName => {
       initialVars[varName] = '';
     });
     setCustomVariables(initialVars);
@@ -247,14 +241,8 @@ export default function Home() {
     // Extract variables from content
     const contentVars = extractVariables(template.content);
 
-    // Filter out automatic variables (these are replaced from contact data)
-    const automaticVars = ['nombre', 'name', 'telefono', 'phone', 'primer_nombre', 'first_name'];
-    const customVars = contentVars.filter(varName =>
-      !automaticVars.includes(varName.toLowerCase())
-    );
-
     const initialVars: Record<string, string> = {};
-    customVars.forEach(varName => {
+    contentVars.forEach(varName => {
       initialVars[varName] = '';
     });
     setCustomVariables(initialVars);
