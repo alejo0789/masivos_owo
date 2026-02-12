@@ -13,6 +13,7 @@ class Template(Base):
     name = Column(String(255), nullable=False, unique=True)
     subject = Column(String(500), nullable=True)  # For email subject
     content = Column(Text, nullable=False)
+    attachment_path = Column(String(500), nullable=True)  # Path or URL to attachment
     channel = Column(String(50), default="email")  # whatsapp, email, both
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

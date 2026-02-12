@@ -9,6 +9,7 @@ class TemplateBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
     subject: Optional[str] = Field(None, max_length=500)
     content: str = Field(..., min_length=1)
+    attachment_path: Optional[str] = Field(None, max_length=500)
     channel: str = Field(default="email", pattern="^(whatsapp|email|sms|both)$")
 
 
@@ -22,6 +23,7 @@ class TemplateUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=255)
     subject: Optional[str] = Field(None, max_length=500)
     content: Optional[str] = Field(None, min_length=1)
+    attachment_path: Optional[str] = Field(None, max_length=500)
     channel: Optional[str] = Field(None, pattern="^(whatsapp|email|sms|both)$")
 
 

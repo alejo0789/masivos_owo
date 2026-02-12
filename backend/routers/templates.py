@@ -1,5 +1,5 @@
 """Templates router for CRUD operations."""
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, File, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from typing import List, Optional
@@ -7,6 +7,7 @@ from database import get_db
 from models.template import Template
 from schemas.template import TemplateCreate, TemplateUpdate, TemplateResponse
 from services.whatsapp_service import get_whatsapp_service
+from services.file_service import file_service
 
 router = APIRouter(prefix="/templates", tags=["templates"])
 
@@ -121,6 +122,14 @@ async def delete_template(template_id: int, db: AsyncSession = Depends(get_db)):
     
     await db.delete(template)
     return None
+
+
+@router.post("/upload")
+async def upload_attachment(file: UploadFile = File(...)):
+    """Upload an attachment for a template."""
+    filename = await file_service.save_file(file)
+    return {"filename": filename, "url": f"/uploads/{filename}"}
+
 
 
 # ============================================

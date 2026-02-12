@@ -422,6 +422,40 @@ export default function Home() {
     }
   };
 
+  // Header File Upload
+  const [headerFileUploading, setHeaderFileUploading] = useState(false);
+  const headerFileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleHeaderFileUpload = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+
+    setHeaderFileUploading(true);
+    try {
+      const fileArray = Array.from(files);
+      // We only take the first file
+      const file = fileArray[0];
+      const filenames = await uploadFiles([file]);
+
+      if (filenames.length > 0) {
+        const filename = filenames[0];
+        // Construct public URL
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001';
+        // Remove trailing slash if present
+        const baseUrl = apiUrl.endsWith('/') ? apiUrl.slice(0, -1) : apiUrl;
+        const publicUrl = `${baseUrl}/uploads/${filename}`;
+
+        setHeaderMediaUrl(publicUrl);
+
+        // Show success feedback if needed, or just rely on the URL appearing in the input
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error al subir archivo de cabecera');
+    } finally {
+      setHeaderFileUploading(false);
+      if (headerFileInputRef.current) headerFileInputRef.current.value = '';
+    }
+  };
+
   // Check if selected template requires media header
   const templateRequiresMedia = selectedTemplate?.header &&
     ['IMAGE', 'VIDEO', 'DOCUMENT'].includes(selectedTemplate.header.type.toUpperCase());
@@ -925,15 +959,58 @@ export default function Home() {
                         selectedTemplate.header.type.toUpperCase() === 'VIDEO' ? 'un video' : 'un documento'}
                     </p>
                   </div>
-                  <input
-                    type="url"
-                    className="w-full px-4 py-2 border border-blue-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent"
-                    placeholder={`URL del archivo ${selectedTemplate.header.type.toLowerCase()} (ej: https://example.com/archivo.${selectedTemplate.header.type.toUpperCase() === 'IMAGE' ? 'jpg' :
-                      selectedTemplate.header.type.toUpperCase() === 'VIDEO' ? 'mp4' : 'pdf'
-                      })`}
-                    value={headerMediaUrl}
-                    onChange={(e) => setHeaderMediaUrl(e.target.value)}
-                  />
+
+                  <div className="space-y-3">
+                    {/* URL Input */}
+                    <input
+                      type="url"
+                      className="w-full px-4 py-2 border border-blue-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent"
+                      placeholder={`URL del archivo ${selectedTemplate.header.type.toLowerCase()} (ej: https://example.com/archivo.${selectedTemplate.header.type.toUpperCase() === 'IMAGE' ? 'jpg' :
+                        selectedTemplate.header.type.toUpperCase() === 'VIDEO' ? 'mp4' : 'pdf'
+                        })`}
+                      value={headerMediaUrl}
+                      onChange={(e) => setHeaderMediaUrl(e.target.value)}
+                    />
+
+                    <div className="flex items-center gap-2">
+                      <div className="h-px bg-blue-200 flex-1"></div>
+                      <span className="text-xs text-blue-400 font-medium">O</span>
+                      <div className="h-px bg-blue-200 flex-1"></div>
+                    </div>
+
+                    {/* File Upload Button */}
+                    <input
+                      ref={headerFileInputRef}
+                      type="file"
+                      accept={selectedTemplate.header.type.toUpperCase() === 'IMAGE' ? 'image/*' :
+                        selectedTemplate.header.type.toUpperCase() === 'VIDEO' ? 'video/*' :
+                          '.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx'}
+                      className="hidden"
+                      onChange={(e) => handleHeaderFileUpload(e.target.files)}
+                    />
+                    <button
+                      onClick={() => headerFileInputRef.current?.click()}
+                      disabled={headerFileUploading}
+                      className="w-full py-2 px-4 rounded-lg bg-blue-50 border border-blue-200 hover:bg-blue-100 text-blue-700 text-sm font-medium transition-all flex items-center justify-center gap-2"
+                    >
+                      {headerFileUploading ? (
+                        <>
+                          <div className="spinner" style={{ width: '16px', height: '16px', borderColor: '#3B82F6', borderRightColor: 'transparent' }} />
+                          Subiendo...
+                        </>
+                      ) : (
+                        <>
+                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                            <polyline points="17 8 12 3 7 8" />
+                            <line x1="12" y1="3" x2="12" y2="15" />
+                          </svg>
+                          Subir archivo desde mi equipo
+                        </>
+                      )}
+                    </button>
+                  </div>
+
                   <p className="text-xs text-gray-500 mt-2">
                     💡 La URL debe ser pública y accesible.
                     {selectedTemplate.header.type.toUpperCase() === 'IMAGE' && ' Formatos soportados: JPG, PNG.'}
