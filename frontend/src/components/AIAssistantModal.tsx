@@ -144,7 +144,7 @@ export default function AIAssistantModal({ context, onClose, onApply }: AIAssist
                                 >
                                     <div
                                         className={`max-w-[80%] rounded-2xl px-4 py-3 shadow-sm ${msg.role === 'user'
-                                            ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white'
+                                            ? 'bg-white text-gray-900 border border-gray-200'
                                             : 'bg-gray-100 text-gray-800 border border-gray-200'
                                             }`}
                                     >
