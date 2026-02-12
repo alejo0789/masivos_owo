@@ -16,6 +16,10 @@ class Recipient(BaseModel):
     department: Optional[str] = None
     position: Optional[str] = None
     company: Optional[str] = None
+    
+    model_config = {
+        "extra": "allow"
+    }
 
 
 class SendTemplateRequest(BaseModel):
@@ -93,18 +97,8 @@ async def send_template_bulk(request: SendTemplateRequest):
     
     variable_mapping = request.variable_mapping or default_mapping
     
-    # Convert recipients to dict format
-    recipients_data = [
-        {
-            "name": r.name,
-            "phone": r.phone,
-            "email": r.email,
-            "department": r.department,
-            "position": r.position,
-            "company": r.company
-        }
-        for r in request.recipients
-    ]
+    # Convert recipients to dict format, including any extra fields
+    recipients_data = [r.model_dump() for r in request.recipients]
     
     result = await whatsapp_service.send_bulk_template_messages(
         recipients=recipients_data,

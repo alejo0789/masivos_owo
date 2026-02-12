@@ -512,6 +512,11 @@ export default function Home() {
         const allMappings: Record<string, string> = {
           'nombre': 'name',
           'name': 'name',
+          'telefono': 'phone',
+          'phone': 'phone',
+          'movil': 'phone',
+          'email': 'email',
+          'correo': 'email',
           'empresa': 'department',
           'company': 'department',
           'departamento': 'department',
@@ -541,15 +546,41 @@ export default function Home() {
         const response = await sendWhatsAppTemplate({
           template_name: selectedTemplate.name,
           language_code: selectedTemplate.language,
-          recipients: recipients.map(r => ({
-            ...r,
-            ...customVarsForRecipients // Add custom variables to each recipient
-          })),
+          recipients: recipients.map(r => {
+            const enhancedRecipient: any = { ...r };
+
+            // Apply custom variables with fallback logic
+            // If the recipient has the data (e.g. name), keep it. 
+            // If not, use the custom variable value.
+            Object.entries(customVarsForRecipients).forEach(([key, value]) => {
+              const lowerKey = key.toLowerCase();
+              const mappedField = allMappings[lowerKey];
+
+              if (mappedField) {
+                // It's a mapped field (like name, phone). 
+                // Only use custom value if recipient data is missing
+                if (!enhancedRecipient[mappedField]) {
+                  enhancedRecipient[mappedField] = value;
+                }
+              } else {
+                // It's a custom variable not mapped to standard fields
+                // Add it to the recipient data
+                enhancedRecipient[key] = value;
+              }
+            });
+
+            return enhancedRecipient;
+          }),
           variable_mapping: {
             ...variableMapping,
             // Add custom variables to the mapping (they'll use the same value for all)
             ...Object.keys(customVarsForRecipients).reduce((acc, key) => {
-              acc[key.toLowerCase()] = key; // Map variable name to itself in recipient data
+              const lowerKey = key.toLowerCase();
+              // Only add to mapping if it's NOT already handled by allMappings
+              // or if we want to ensure the custom key maps to itself for the fallback to work
+              if (!allMappings[lowerKey]) {
+                acc[lowerKey] = key;
+              }
               return acc;
             }, {} as Record<string, string>)
           },
@@ -578,22 +609,28 @@ export default function Home() {
               // Replace variables for each contact individually
               let personalizedMessage = content;
 
+              const contactName = c.name || customVariables['nombre'] || customVariables['name'] || '';
+              const contactPhone = c.phone || customVariables['telefono'] || customVariables['phone'] || customVariables['movil'] || '';
+              const firstName = contactName ? contactName.split(' ')[0] : '';
+
               // Replace {{nombre}} or {{name}}
-              personalizedMessage = personalizedMessage.replace(/\{\{nombre\}\}/gi, c.name || '');
-              personalizedMessage = personalizedMessage.replace(/\{\{name\}\}/gi, c.name || '');
+              personalizedMessage = personalizedMessage.replace(/\{\{nombre\}\}/gi, contactName);
+              personalizedMessage = personalizedMessage.replace(/\{\{name\}\}/gi, contactName);
 
               // Replace {{telefono}} or {{phone}}
-              personalizedMessage = personalizedMessage.replace(/\{\{telefono\}\}/gi, c.phone || '');
-              personalizedMessage = personalizedMessage.replace(/\{\{phone\}\}/gi, c.phone || '');
+              personalizedMessage = personalizedMessage.replace(/\{\{telefono\}\}/gi, contactPhone);
+              personalizedMessage = personalizedMessage.replace(/\{\{phone\}\}/gi, contactPhone);
 
               // Replace {{primer_nombre}} or {{first_name}}
-              const firstName = c.name ? c.name.split(' ')[0] : '';
               personalizedMessage = personalizedMessage.replace(/\{\{primer_nombre\}\}/gi, firstName);
               personalizedMessage = personalizedMessage.replace(/\{\{first_name\}\}/gi, firstName);
 
               // Replace custom variables if any (static values for all)
               if (Object.keys(customVariables).length > 0) {
                 Object.keys(customVariables).forEach(varName => {
+                  // Skip standard variables we already handled if they were in customVariables
+                  if (['nombre', 'name', 'telefono', 'phone', 'movil', 'primer_nombre', 'first_name'].includes(varName.toLowerCase())) return;
+
                   const regex = new RegExp(`\\{\\{${varName}\\}\\}`, 'gi');
                   personalizedMessage = personalizedMessage.replace(regex, customVariables[varName]);
                 });
@@ -639,9 +676,9 @@ export default function Home() {
         } else {
           // Regular message via n8n webhook (WhatsApp or Email)
           const recipients = selectedContacts.map(c => ({
-            name: c.name,
-            phone: c.phone,
-            email: c.email,
+            name: c.name || customVariables['nombre'] || customVariables['name'] || '',
+            phone: c.phone || customVariables['telefono'] || customVariables['phone'] || customVariables['movil'] || '',
+            email: c.email || customVariables['email'] || customVariables['correo'] || '',
           }));
 
           // For email channel, wrap content in full HTML template
@@ -651,10 +688,21 @@ export default function Home() {
           if (channel === 'email') {
             // Replace custom variables in content and subject
             let bodyContent = content;
-            if (selectedEmailTemplate && Object.keys(customVariables).length > 0) {
-              bodyContent = replaceVariables(content, customVariables);
-              emailSubject = replaceVariables(subject || '', customVariables);
-            } else if (!selectedEmailTemplate) {
+            if (Object.keys(customVariables).length > 0) {
+              // We only replace variables that are NOT standard contact fields here
+              // because standard fields (nombre, email) are handled by the backend per recipient
+              const standardVars = ['nombre', 'name', 'telefono', 'phone', 'movil', 'email', 'correo', 'primer_nombre', 'first_name'];
+              const customVarsOnly = Object.fromEntries(
+                Object.entries(customVariables).filter(([key]) => !standardVars.includes(key.toLowerCase()))
+              );
+
+              if (Object.keys(customVarsOnly).length > 0) {
+                bodyContent = replaceVariables(content, customVarsOnly);
+                emailSubject = replaceVariables(subject || '', customVarsOnly);
+              }
+            }
+
+            if (!selectedEmailTemplate) {
               // If sending without a template (plain text), convert newlines to <br>
               bodyContent = content.replace(/\n/g, '<br />');
             }
