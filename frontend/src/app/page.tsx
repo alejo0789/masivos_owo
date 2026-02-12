@@ -439,12 +439,13 @@ export default function Home() {
 
       if (filenames.length > 0) {
         const filename = filenames[0];
-        // Construct public URL
+        // Construct public URL using the configured API URL
+        // IMPORTANT: NEXT_PUBLIC_API_URL must be the PUBLICLY ACCESSIBLE URL of the backend
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001';
-        // Remove trailing slash if present
         const baseUrl = apiUrl.endsWith('/') ? apiUrl.slice(0, -1) : apiUrl;
         const publicUrl = `${baseUrl}/uploads/${filename}`;
 
+        console.log('File uploaded. Public URL:', publicUrl);
         setHeaderMediaUrl(publicUrl);
         setHeaderFileName(file.name);
       }
