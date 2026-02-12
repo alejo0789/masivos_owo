@@ -4,6 +4,7 @@ Sistema para enviar mensajes masivos a traves de WhatsApp y Email.
 """
 import os
 import logging
+import asyncio
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -67,6 +68,28 @@ async def lifespan(app: FastAPI):
         print("[WARN] WhatsApp API: falta PHONE_NUMBER_ID")
     else:
         print("[WARN] WhatsApp Direct API NO configurada")
+    
+    # Run initial cleanup on startup
+    # try:
+    #     from cleanup_uploads import cleanup_old_files
+    #     print("[CLEANUP] Ejecutando limpieza inicial de archivos antiguos...")
+    #     cleanup_old_files(days=3)
+    # except Exception as e:
+    #     print(f"[ERROR] Fallo en limpieza inicial: {e}")
+
+    # Schedule daily cleanup task
+    async def periodic_cleanup():
+        # Wait 24 hours BEFORE first run
+        while True:
+            await asyncio.sleep(86400)  # Wait 24 hours first
+            try:
+                from cleanup_uploads import cleanup_old_files
+                print("[CLEANUP] Ejecutando limpieza diaria programada...")
+                cleanup_old_files(days=3)
+            except Exception as e:
+                print(f"[ERROR] Fallo en limpieza diaria: {e}")
+                
+    asyncio.create_task(periodic_cleanup())
     
     yield
     
