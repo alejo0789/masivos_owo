@@ -65,6 +65,19 @@ async def delete_file(filename: str):
     raise HTTPException(status_code=404, detail="Archivo no encontrado")
 
 
+async def update_batch_failure(batch_id: str, error_message: str):
+    """Update all pending messages in a batch to failed."""
+    async with async_session() as db:
+        stmt = (
+            update(MessageLog)
+            .where(MessageLog.batch_id == batch_id)
+            .where(MessageLog.status == "pending")
+            .values(status="failed", error_message=error_message)
+        )
+        await db.execute(stmt)
+        await db.commit()
+
+
 async def send_bulk_background(
     batch_id: str,
     channel: str,
@@ -77,22 +90,28 @@ async def send_bulk_background(
     """Background task to send bulk messages to n8n."""
     # Send to WhatsApp webhook
     if recipients_whatsapp:
-        await webhook_service.send_bulk_whatsapp(
+        result = await webhook_service.send_bulk_whatsapp(
             recipients=recipients_whatsapp,
             message=content,
             attachments=attachment_data,
             batch_id=batch_id
         )
+        if not result.get("success"):
+            print(f"Error sending WhatsApp webhook: {result.get('error')}")
+            await update_batch_failure(batch_id, f"WhatsApp Webhook Error: {result.get('error')}")
     
     # Send to Email webhook
     if recipients_email:
-        await webhook_service.send_bulk_email(
+        result = await webhook_service.send_bulk_email(
             recipients=recipients_email,
             subject=subject,
             message=content,
             attachments=attachment_data,
             batch_id=batch_id
         )
+        if not result.get("success"):
+            print(f"Error sending Email webhook: {result.get('error')}")
+            await update_batch_failure(batch_id, f"Email Webhook Error: {result.get('error')}")
 
 
 @router.post("/callback")

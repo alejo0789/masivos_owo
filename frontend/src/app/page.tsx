@@ -370,15 +370,97 @@ export default function Home() {
 </html>`;
   };
 
+  // WhatsApp file type & size rules
+  const WHATSAPP_FILE_RULES = {
+    audio: {
+      maxMB: 16,
+      mimeTypes: ['audio/aac', 'audio/mp4', 'audio/mpeg', 'audio/amr', 'audio/ogg'],
+      extensions: ['.aac', '.mp4', '.mpeg', '.mp3', '.amr', '.ogg'],
+      label: 'Audio',
+      formats: 'AAC, MP4, MPEG, AMR, OGG',
+    },
+    document: {
+      maxMB: 100,
+      mimeTypes: [
+        'text/plain',
+        'application/pdf',
+        'application/msword',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'application/vnd.ms-excel',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'application/vnd.ms-powerpoint',
+        'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        'application/vnd.oasis.opendocument.text',
+        'application/vnd.oasis.opendocument.spreadsheet',
+        'application/vnd.oasis.opendocument.presentation',
+      ],
+      extensions: ['.txt', '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.odt', '.ods', '.odp'],
+      label: 'Documento',
+      formats: 'TXT, PDF, DOC, DOCX, XLS, XLSX, PPT, PPTX, ODT, ODS, ODP',
+    },
+    image: {
+      maxMB: 5,
+      mimeTypes: ['image/jpeg', 'image/png'],
+      extensions: ['.jpg', '.jpeg', '.png'],
+      label: 'Imagen',
+      formats: 'JPEG, PNG',
+    },
+    video: {
+      maxMB: 16,
+      mimeTypes: ['video/mp4', 'video/3gpp'],
+      extensions: ['.mp4', '.3gp'],
+      label: 'Video',
+      formats: 'MP4, 3GP',
+    },
+  };
+
+  const validateWhatsAppFile = (file: File): string | null => {
+    const ext = '.' + file.name.split('.').pop()?.toLowerCase();
+    const mime = file.type.toLowerCase();
+    const sizeMB = file.size / (1024 * 1024);
+
+    for (const [, rule] of Object.entries(WHATSAPP_FILE_RULES)) {
+      const matchesMime = rule.mimeTypes.includes(mime);
+      const matchesExt = rule.extensions.includes(ext);
+      if (matchesMime || matchesExt) {
+        if (sizeMB > rule.maxMB) {
+          return `"${file.name}" supera el límite de ${rule.maxMB} MB para ${rule.label}s de WhatsApp (tamaño: ${sizeMB.toFixed(1)} MB).`;
+        }
+        return null; // valid
+      }
+    }
+
+    return `"${file.name}" no es un formato permitido por WhatsApp.\n\nFormatos permitidos:\n• Audio (<16 MB): AAC, MP4, MPEG, AMR, OGG\n• Documentos (<100 MB): TXT, PDF, DOC, DOCX, XLS, XLSX, PPT, PPTX, ODT, ODS, ODP\n• Imágenes (<5 MB): JPEG, PNG\n• Video (<16 MB): MP4, 3GP`;
+  };
+
   const handleFileUpload = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
+
+    const fileArray = Array.from(files);
+
+    // Validate each file before uploading
+    const validationErrors: string[] = [];
+    const validFiles: File[] = [];
+    for (const file of fileArray) {
+      const err = validateWhatsAppFile(file);
+      if (err) {
+        validationErrors.push(err);
+      } else {
+        validFiles.push(file);
+      }
+    }
+
+    if (validationErrors.length > 0) {
+      setError(validationErrors.join('\n'));
+      if (validFiles.length === 0) return;
+    }
+
     setUploading(true);
     try {
-      const fileArray = Array.from(files);
-      const filenames = await uploadFiles(fileArray);
+      const filenames = await uploadFiles(validFiles);
 
       const newFiles = filenames.map((name, index) => {
-        const file = fileArray[index];
+        const file = validFiles[index];
         const isImage = file.type.startsWith('image/');
         let preview: string | undefined;
 
@@ -418,11 +500,18 @@ export default function Home() {
   const handleHeaderFileUpload = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
 
+    const file = files[0];
+
+    // Validate against WhatsApp rules
+    const validationError = validateWhatsAppFile(file);
+    if (validationError) {
+      setError(validationError);
+      if (headerFileInputRef.current) headerFileInputRef.current.value = '';
+      return;
+    }
+
     setHeaderFileUploading(true);
     try {
-      const fileArray = Array.from(files);
-      // We only take the first file
-      const file = fileArray[0];
       const filenames = await uploadFiles([file]);
 
       if (filenames.length > 0) {
@@ -1661,7 +1750,7 @@ export default function Home() {
                       ref={fileInputRef}
                       type="file"
                       multiple
-                      accept="image/*,.pdf,.doc,.docx,.xls,.xlsx"
+                      accept="audio/aac,audio/mp4,audio/mpeg,audio/amr,audio/ogg,.aac,.amr,.ogg,image/jpeg,image/png,.jpg,.jpeg,.png,video/mp4,video/3gpp,.mp4,.3gp,text/plain,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.oasis.opendocument.text,application/vnd.oasis.opendocument.spreadsheet,application/vnd.oasis.opendocument.presentation,.txt,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.odt,.ods,.odp"
                       className="hidden"
                       onChange={(e) => handleFileUpload(e.target.files)}
                     />

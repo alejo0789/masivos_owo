@@ -125,7 +125,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// === PREPARAR ADJUNTOS PARA OUTLOOK ===\n// Este nodo prepara la estructura de adjuntos que espera el nodo de Outlook\n\nconst item = $input.first();\nconst attachmentKeys = item.json.attachmentKeys || [];\n\n// Pasar el item tal cual, el nodo de Outlook usará los binarios\nreturn [item];"
+        "jsCode": "// === PREPARAR ADJUNTOS PARA OUTLOOK ===\n// Este nodo prepara la estructura de adjuntos que espera el nodo de Outlook\n\n// Pasar todos los items tal cual para que se envíen todos los correos\nreturn $input.all();"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -340,7 +340,7 @@
   "pinData": {},
   "versionId": "ea688aad-f317-4b61-982c-d76427706670",
   "activeVersionId": "ea688aad-f317-4b61-982c-d76427706670",
-  "versionCounter": 45,
+  "versionCounter": 47,
   "triggerCount": 1,
   "activeVersion": {
     "updatedAt": "2026-02-05T14:12:58.280Z",
@@ -686,6 +686,14 @@
       {
         "createdAt": "2026-02-10T18:59:56.906Z",
         "id": 93,
+        "workflowId": "rwf9fwf3OoRje1R5dyZJN",
+        "versionId": "ea688aad-f317-4b61-982c-d76427706670",
+        "event": "activated",
+        "userId": "de8d0752-fee5-467a-bd27-8e8af92a6c23"
+      },
+      {
+        "createdAt": "2026-02-12T15:38:16.185Z",
+        "id": 117,
         "workflowId": "rwf9fwf3OoRje1R5dyZJN",
         "versionId": "ea688aad-f317-4b61-982c-d76427706670",
         "event": "activated",
