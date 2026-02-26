@@ -19,6 +19,7 @@ class WhatsAppService:
         self.access_token = self.settings.whatsapp_access_token
         self.business_account_id = self.settings.whatsapp_business_account_id
         self.phone_number_id = self.settings.whatsapp_phone_number_id
+        self.ssl_verify = self.settings.ssl_verify
     
     def _get_headers(self) -> Dict[str, str]:
         """Get authorization headers for API requests."""
@@ -77,7 +78,7 @@ class WhatsAppService:
             params["status"] = status
         
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with httpx.AsyncClient(timeout=30.0, verify=self.ssl_verify) as client:
                 response = await client.get(
                     url,
                     headers=self._get_headers(),
@@ -186,7 +187,7 @@ class WhatsAppService:
         logger.debug(f"Payload: {payload}")
         
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with httpx.AsyncClient(timeout=30.0, verify=self.ssl_verify) as client:
                 response = await client.post(
                     url,
                     headers=self._get_headers(),

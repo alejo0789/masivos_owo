@@ -54,7 +54,7 @@ async def chat_with_assistant(request: AssistantRequest):
         }
         
         # Send request to n8n webhook
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        async with httpx.AsyncClient(timeout=60.0, verify=settings.ssl_verify) as client:
             response = await client.post(
                 settings.webhook_assistant,
                 json=payload
@@ -117,7 +117,7 @@ async def generate_template(request: AssistantRequest):
             "action": "generate_final"
         }
         
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        async with httpx.AsyncClient(timeout=60.0, verify=settings.ssl_verify) as client:
             response = await client.post(
                 settings.webhook_assistant,
                 json=payload

@@ -68,7 +68,7 @@ async def get_owo_token(force_refresh: bool = False) -> str:
     
     for attempt in range(MAX_RETRIES):
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with httpx.AsyncClient(timeout=30.0, verify=settings.ssl_verify) as client:
                 response = await client.post(
                     settings.owo_api_login_url,
                     json={
@@ -135,7 +135,7 @@ async def fetch_owo_contacts(token: str, retry_with_new_token: bool = True) -> L
         print(f"[DEBUG] URL: {settings.owo_api_contacts_url}")
         print(f"[DEBUG] Token (first 20 chars): {token[:20]}..." if len(token) > 20 else f"[DEBUG] Token: {token}")
         try:
-            async with httpx.AsyncClient(timeout=120.0, verify=True) as client:
+            async with httpx.AsyncClient(timeout=120.0, verify=settings.ssl_verify) as client:
                 headers = {
                     "Authorization": f"Bearer {token}",
                     "Accept": "application/json",

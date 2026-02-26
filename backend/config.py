@@ -42,6 +42,9 @@ class Settings(BaseSettings):
     # Database
     database_url: str = "sqlite+aiosqlite:///./messaging.db"
     
+    # SSL
+    ssl_verify: bool = True
+    
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

@@ -17,6 +17,7 @@ class SMSService:
         self.username = settings.labsmobile_username
         self.token = settings.labsmobile_token
         self.sender = settings.labsmobile_sender
+        self.ssl_verify = settings.ssl_verify
     
     def _get_auth_header(self) -> str:
         """Generate Base64 encoded Basic Auth header."""
@@ -89,7 +90,7 @@ class SMSService:
         }
         
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with httpx.AsyncClient(timeout=30.0, verify=self.ssl_verify) as client:
                 logger.info(f"Sending SMS to {formatted_phone}")
                 logger.debug(f"Payload: {payload}")
                 
@@ -233,7 +234,7 @@ class SMSService:
         }
         
         try:
-            async with httpx.AsyncClient(timeout=60.0) as client:
+            async with httpx.AsyncClient(timeout=60.0, verify=self.ssl_verify) as client:
                 logger.info(f"Sending bulk SMS to {len(formatted_recipients)} recipients")
                 
                 response = await client.post(
@@ -296,7 +297,7 @@ class SMSService:
         
         try:
             # LabsMobile credit check endpoint
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with httpx.AsyncClient(timeout=30.0, verify=self.ssl_verify) as client:
                 response = await client.get(
                     "https://api.labsmobile.com/json/balance",
                     headers=headers

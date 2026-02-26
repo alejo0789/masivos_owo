@@ -16,6 +16,7 @@ class WebhookService:
         self.whatsapp_url = settings.webhook_whatsapp
         self.email_url = settings.webhook_email
         self.timeout = 600.0  # 10 minutes timeout for bulk operations
+        self.ssl_verify = settings.ssl_verify
     
     async def send_bulk_whatsapp(
         self,
@@ -46,7 +47,7 @@ class WebhookService:
         }
         
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
+            async with httpx.AsyncClient(timeout=self.timeout, verify=self.ssl_verify) as client:
                 response = await client.post(self.whatsapp_url, json=payload)
                 response.raise_for_status()
                 
@@ -116,7 +117,7 @@ class WebhookService:
         }
         
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
+            async with httpx.AsyncClient(timeout=self.timeout, verify=self.ssl_verify) as client:
                 response = await client.post(self.email_url, json=payload)
                 response.raise_for_status()
                 
