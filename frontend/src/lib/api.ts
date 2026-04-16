@@ -379,6 +379,28 @@ export async function getHistoryCount(params?: {
     return handleResponse<{ count: number }>(response);
 }
 
+export async function exportHistory(params?: {
+    search?: string;
+    channel?: string;
+    status?: string;
+    date_from?: string;
+    date_to?: string;
+}): Promise<Blob> {
+    const searchParams = new URLSearchParams();
+    if (params?.search) searchParams.append('search', params.search);
+    if (params?.channel) searchParams.append('channel', params.channel);
+    if (params?.status) searchParams.append('status', params.status);
+    if (params?.date_from) searchParams.append('date_from', params.date_from);
+    if (params?.date_to) searchParams.append('date_to', params.date_to);
+
+    const url = `${API_URL}/history/export?${searchParams.toString()}`;
+    const response = await fetch(url);
+    if (!response.ok) {
+        throw new Error('Error al exportar historial');
+    }
+    return response.blob();
+}
+
 export async function deleteHistory(params: {
     search?: string;
     channel?: string;
