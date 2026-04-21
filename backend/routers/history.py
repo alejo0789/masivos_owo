@@ -292,7 +292,12 @@ async def export_history(
         log_status = log.status.lower() if log.status else ""
         estado = status_map.get(log_status, log.status)
         
-        plantilla = log.subject or "N/A"
+        plantilla = log.subject
+        if not plantilla and log_channel == "whatsapp" and log.message_content and log.message_content.startswith("Template: "):
+            plantilla = log.message_content.replace("Template: ", "")
+            
+        if not plantilla:
+            plantilla = "N/A"
         
         ws.append([fecha, usuario, destinatario, canal, estado, plantilla, fecha_hora])
         

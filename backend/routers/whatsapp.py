@@ -42,6 +42,7 @@ class SendSingleTemplateRequest(BaseModel):
     template_name: str
     language_code: str = "es_CO"
     phone: str
+    recipient_name: Optional[str] = "Unknown"
     variables: Optional[Dict[str, str]] = None
 
 
@@ -119,7 +120,7 @@ async def send_template_bulk(request: SendTemplateRequest):
                     recipient_name=msg_result["recipient"],
                     recipient_phone=msg_result.get("phone"),
                     recipient_email=None,
-                    subject=None,
+                    subject=request.template_name,
                     message_content=message_content,
                     channel="whatsapp",
                     status="sent" if msg_result["success"] else "failed",
@@ -190,7 +191,7 @@ async def send_single_template(request: SendSingleTemplateRequest):
                 recipient_name=request.recipient_name or "Unknown",
                 recipient_phone=request.phone,
                 recipient_email=None,
-                subject=None,
+                subject=request.template_name,
                 message_content=message_content,
                 channel="whatsapp",
                 status="sent" if result["success"] else "failed",
