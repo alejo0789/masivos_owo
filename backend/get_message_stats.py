@@ -23,18 +23,18 @@ def get_stats():
         status_counts = cursor.fetchall()
         
         print("-" * 40)
-        print("📊 ESTADÍSTICAS DEL HISTORIAL")
+        print(" ESTADISTICAS DEL HISTORIAL")
         print("-" * 40)
-        print(f"✅ Total histórico (ID máximo):  {max_id if max_id else 0}")
-        print(f"📧 Mensajes actuales en DB:     {count}")
-        print(f"🗑️ Mensajes eliminados:          {(max_id - count) if max_id and count else 0}")
+        print(f" Total historico (ID maximo):  {max_id if max_id else 0}")
+        print(f" Mensajes actuales en DB:     {count}")
+        print(f" Mensajes eliminados:          {(max_id - count) if max_id and count else 0}")
         print("-" * 40)
         
         if status_counts:
             print("Detalle por estado en base de datos:")
             for status, s_count in status_counts:
                 st = status if status else "N/A"
-                print(f"  • {st.capitalize()}: {s_count}")
+                print(f"  - {st.capitalize()}: {s_count}")
         
         conn.close()
         
