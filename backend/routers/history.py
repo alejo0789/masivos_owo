@@ -75,20 +75,18 @@ async def get_history(
 
 @router.get("/stats")
 async def get_stats(
-    days: int = Query(7, ge=1, le=365, description="Number of days to include in stats"),
+    days: int = Query(30, ge=1, le=365, description="Number of days to include in stats"),
     db: AsyncSession = Depends(get_db)
 ):
     """Get messaging statistics."""
     from models.message_log import get_colombia_time
     cutoff_date = get_colombia_time() - timedelta(days=days)
     
-    # Total messages
-    total_result = await db.execute(
-        select(func.count(MessageLog.id)).where(MessageLog.sent_at >= cutoff_date)
-    )
+    # Total messages (Histórico basado en el último ID para ignorar borrados)
+    total_result = await db.execute(select(func.max(MessageLog.id)))
     total = total_result.scalar() or 0
     
-    # Sent messages
+    # Sent messages (últimos 30 días)
     sent_result = await db.execute(
         select(func.count(MessageLog.id)).where(
             and_(MessageLog.sent_at >= cutoff_date, MessageLog.status == "sent")

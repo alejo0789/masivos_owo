@@ -168,7 +168,7 @@ export default function HistoryPage() {
                             </div>
                             <div>
                                 <p className="text-3xl font-bold text-gray-900">{stats.total}</p>
-                                <p className="text-sm text-gray-400">Total (30 días)</p>
+                                <p className="text-sm text-gray-400">Total Histórico</p>
                             </div>
                         </div>
                     </div>
