@@ -164,17 +164,16 @@ class WebhookService:
         for filename in filenames:
             filepath = os.path.join(upload_dir, filename)
             if os.path.exists(filepath):
-                with open(filepath, "rb") as f:
-                    data = base64.b64encode(f.read()).decode("utf-8")
                 # Guess MIME type
                 mime_type, _ = mimetypes.guess_type(filepath)
                 if not mime_type:
                     mime_type = "application/octet-stream"
                 
+                # En lugar de enviar el archivo en Base64, enviamos la ruta para que n8n lo descargue
                 attachments.append({
                     "filename": filename,
-                    "data": data,
-                    "mimeType": mime_type
+                    "mimeType": mime_type,
+                    "urlPath": f"/uploads/{filename}" # Ruta relativa que n8n usará para descargar
                 })
         
         return attachments
