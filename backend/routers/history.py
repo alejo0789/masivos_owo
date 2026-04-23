@@ -124,12 +124,14 @@ async def get_stats(
     )
     sms = sms_result.scalar() or 0
     
+    total_processed = sent + failed
+    
     return {
         "period_days": days,
         "total": total,
         "sent": sent,
         "failed": failed,
-        "success_rate": round((sent / total * 100) if total > 0 else 0, 2),
+        "success_rate": round((sent / total_processed * 100) if total_processed > 0 else 0, 2),
         "by_channel": {
             "whatsapp": whatsapp,
             "email": email,

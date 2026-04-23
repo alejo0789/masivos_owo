@@ -167,7 +167,7 @@ export default function HistoryPage() {
                                 </svg>
                             </div>
                             <div>
-                                <p className="text-3xl font-bold text-gray-900">{stats.total}</p>
+                                <p className="text-3xl font-bold text-[#8B5A9B]">{stats.total.toLocaleString('es-CO')}</p>
                                 <p className="text-sm text-gray-400">Total Histórico</p>
                             </div>
                         </div>
@@ -180,8 +180,8 @@ export default function HistoryPage() {
                                 <span className="text-2xl">✅</span>
                             </div>
                             <div>
-                                <p className="text-3xl font-bold text-green-600">{stats.sent}</p>
-                                <p className="text-sm text-gray-400">Enviados</p>
+                                <p className="text-3xl font-bold text-green-600">{stats.sent.toLocaleString('es-CO')}</p>
+                                <p className="text-sm text-gray-400">Enviados (30 días)</p>
                             </div>
                         </div>
                     </div>
@@ -193,7 +193,7 @@ export default function HistoryPage() {
                                 <span className="text-2xl">❌</span>
                             </div>
                             <div>
-                                <p className="text-3xl font-bold text-red-500">{stats.failed}</p>
+                                <p className="text-3xl font-bold text-red-500">{stats.failed.toLocaleString('es-CO')}</p>
                                 <p className="text-sm text-gray-400">Fallidos</p>
                             </div>
                         </div>
