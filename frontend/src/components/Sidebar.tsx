@@ -114,7 +114,7 @@ export default function Sidebar() {
                         }}>
                             {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img
-                                src={`${process.env.NEXT_PUBLIC_BASE_PATH || ''}/owo-logo.webp`}
+                                src={`${process.env.NEXT_PUBLIC_BASE_PATH || '/masivos_owo'}/owo-logo.webp`}
                                 alt="OWO"
                                 width={56}
                                 height={56}
